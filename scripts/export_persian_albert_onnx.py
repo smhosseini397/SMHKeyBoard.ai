@@ -2,18 +2,19 @@
 """Download the MIT-licensed Persian ALBERT checkpoint and export it for Android ONNX Runtime."""
 from pathlib import Path
 import json
-import shutil
+import tempfile
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoModelForMaskedLM, AlbertTokenizer
 
 REPO = "shekar-ai/albert-base-v2-persian-zwnj-naab-mlm"
 OUT = Path("app/src/main/assets/semantic")
 OUT.mkdir(parents=True, exist_ok=True)
 
-tokenizer = AutoTokenizer.from_pretrained(REPO, use_fast=False)
+# استفاده از AlbertTokenizer (slow) به جای AutoTokenizer، تا از دسترسی به vocab_file پشتیبانی شود
+tokenizer = AlbertTokenizer.from_pretrained(REPO)
 model = AutoModelForMaskedLM.from_pretrained(REPO).cpu().eval()
 
-# Keep exact special-token ids from the upstream tokenizer; never guess these ids.
+# حفظ شناسه‌های دقیق توکن‌های ویژه
 special = {
     "cls_token_id": int(tokenizer.cls_token_id),
     "sep_token_id": int(tokenizer.sep_token_id),
@@ -23,8 +24,23 @@ special = {
 }
 (OUT / "special_tokens.json").write_text(json.dumps(special, ensure_ascii=False, indent=2), encoding="utf-8")
 
-spiece = Path(tokenizer.vocab_file)
-shutil.copyfile(spiece, OUT / "spiece.model")
+# روش صحیح: استفاده از save_vocabulary برای استخراج فایل sentencepiece
+with tempfile.TemporaryDirectory() as tmp_dir:
+    saved_files = tokenizer.save_vocabulary(tmp_dir)
+    # saved_files یک tuple است که مسیر فایل‌های ذخیره شده را برمی‌گرداند؛ معمولاً شامل spiece.model است
+    spiece_path = None
+    for f in saved_files:
+        if f.endswith("spiece.model"):
+            spiece_path = Path(f)
+            break
+    if spiece_path is None:
+        # در صورت عدم تطابق، از نام فایل استاندارد استفاده می‌کنیم
+        spiece_path = Path(tmp_dir) / "spiece.model"
+    if not spiece_path.exists():
+        raise FileNotFoundError(f"spiece.model در {tmp_dir} یافت نشد")
+    # کپی به پوشه خروجی
+    import shutil
+    shutil.copyfile(spiece_path, OUT / "spiece.model")
 
 class ExportWrapper(torch.nn.Module):
     def __init__(self, wrapped):
