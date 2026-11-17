@@ -209,6 +209,22 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "وزن دکمه فاصله (۱ تا ۸)", "space_weight", 3, 1, 8)
         addNumberField(outer, "وزن دکمه اینتر (۱۰ تا ۲۵ - تقسیم بر ۱۰ می‌شود)", "enter_weight", 15, 10, 25)
 
+        outer.addView(sectionTitle("تصحیح خودکار"))
+        val autoCorrect = CheckBox(this).apply {
+            text = "فعال‌سازی جایگزینی خودکار کلمات"
+            isChecked = prefs.getBoolean("auto_correct", true)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("auto_correct", checked).apply()
+            }
+        }
+        outer.addView(autoCorrect)
+        outer.addView(TextView(this).apply {
+            text = "اگر خاموش باشد، کلمات شما به‌صورت خودکار تغییر نمی‌کنند، اما پیشنهادها نمایش داده می‌شوند و یادگیری کیبورد ادامه پیدا می‌کند."
+            textSize = 12f
+            setTextColor(0xFF8A8399.toInt())
+            setPadding(0, dp(4), 0, dp(8))
+        })
+
         outer.addView(sectionTitle("تنظیمات عمومی (حالت افقی)"))
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
@@ -434,6 +450,7 @@ class SettingsActivity : Activity() {
                     .putBoolean("merge_key_zhe", false)
                     .putInt("space_weight", 3)
                     .putInt("enter_weight", 15)
+                    .putBoolean("auto_correct", true)
                     .putBoolean("dark", false)
                     .putString("theme", "default")
                     .putBoolean("standard_big_keyboard", false)
