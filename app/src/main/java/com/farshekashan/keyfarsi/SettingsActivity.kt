@@ -236,7 +236,8 @@ class SettingsActivity : Activity() {
             "merge_key_kaf" to "حذف کلید «ک»",
             "merge_key_gaf" to "حذف کلید «گ»",
             "merge_key_re" to "حذف کلید «ر»",
-            "merge_key_zhe" to "حذف کلید «ژ»"
+            "merge_key_zhe" to "حذف کلید «ژ»",
+            "merge_ta_za" to "ادغام «ط» و «ظ» (نگه‌داشتن ط → ظ)"
         ).forEach { (key, label) ->
             val cb = CheckBox(this).apply {
                 text = label
@@ -252,6 +253,32 @@ class SettingsActivity : Activity() {
             }
             outer.addView(cb)
         }
+
+        outer.addView(sectionTitle("بک‌اسپیس"))
+        val backspaceSeparate = CheckBox(this).apply {
+            text = "انتقال بک‌اسپیس به ردیف مستقل پایین"
+            isChecked = prefs.getBoolean("backspace_separate_row", false)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("backspace_separate_row", checked).apply()
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "برای اعمال تغییرات، کیبورد را ببندید و دوباره باز کنید",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        outer.addView(backspaceSeparate)
+        addNumberField(outer, "وزن بک‌اسپیس در ردیف مستقل (۱ تا ۵)", "backspace_weight", 2, 1, 5)
+        addNumberField(outer, "ارتفاع بک‌اسپیس در ردیف مستقل (dp) - ۰ برای خودکار", "backspace_separate_height", 0, 0, 120)
+
+        outer.addView(sectionTitle("جابه‌جایی عمودی کیبورد"))
+        outer.addView(TextView(this).apply {
+            text = "اگر کیبورد خیلی پایین است، آن را به سمت بالا ببرید. مقدار مثبت = بالا، منفی = پایین."
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        addNumberField(outer, "جابه‌جایی عمودی (dp) - ۱۰۰- تا ۲۰۰", "keyboard_vertical_offset", 0, -100, 200)
 
         outer.addView(sectionTitle("تنظیمات عمومی (حالت افقی)"))
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
@@ -341,7 +368,8 @@ class SettingsActivity : Activity() {
             "merge_key_kaf" to "حذف کلید «ک»",
             "merge_key_gaf" to "حذف کلید «گ»",
             "merge_key_re" to "حذف کلید «ر»",
-            "merge_key_zhe" to "حذف کلید «ژ»"
+            "merge_key_zhe" to "حذف کلید «ژ»",
+            "merge_ta_za" to "ادغام «ط» و «ظ» (نگه‌داشتن ط → ظ)"
         )
 
         mergeKeyOptions.forEach { (key, label) ->
@@ -359,6 +387,32 @@ class SettingsActivity : Activity() {
             }
             outer.addView(cb)
         }
+
+        outer.addView(sectionTitle("بک‌اسپیس"))
+        val backspaceSeparate = CheckBox(this).apply {
+            text = "انتقال بک‌اسپیس به ردیف مستقل پایین"
+            isChecked = prefs.getBoolean("backspace_separate_row", false)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("backspace_separate_row", checked).apply()
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "برای اعمال تغییرات، کیبورد را ببندید و دوباره باز کنید",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        outer.addView(backspaceSeparate)
+        addNumberField(outer, "وزن بک‌اسپیس در ردیف مستقل (۱ تا ۵)", "backspace_weight", 2, 1, 5)
+        addNumberField(outer, "ارتفاع بک‌اسپیس در ردیف مستقل (dp) - ۰ برای خودکار", "backspace_separate_height", 0, 0, 120)
+
+        outer.addView(sectionTitle("جابه‌جایی عمودی کیبورد"))
+        outer.addView(TextView(this).apply {
+            text = "اگر کیبورد خیلی پایین است، آن را به سمت بالا ببرید. مقدار مثبت = بالا، منفی = پایین."
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        addNumberField(outer, "جابه‌جایی عمودی (dp) - ۱۰۰- تا ۲۰۰", "keyboard_vertical_offset", 0, -100, 200)
 
         outer.addView(sectionTitle("تنظیمات اندازه کیبورد استاندارد"))
         addNumberField(outer, "عرض کیبورد استاندارد (dp) - ۰ برای خودکار", "standard_keyboard_width", 0, 0, 1200)
@@ -475,6 +529,11 @@ class SettingsActivity : Activity() {
                     .putBoolean("merge_key_gaf", false)
                     .putBoolean("merge_key_re", false)
                     .putBoolean("merge_key_zhe", false)
+                    .putBoolean("merge_ta_za", false)
+                    .putBoolean("backspace_separate_row", false)
+                    .putInt("backspace_weight", 2)
+                    .putInt("backspace_separate_height", 0)
+                    .putInt("keyboard_vertical_offset", 0)
                     .putInt("space_weight", 3)
                     .putInt("enter_weight", 15)
                     .putBoolean("auto_correct", true)
@@ -535,7 +594,7 @@ class SettingsActivity : Activity() {
         row.addView(labelView)
 
         val input = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
             setSingleLine(true)
             setText(prefs.getInt(key, default).toString())
             hint = "عدد دلخواه"
