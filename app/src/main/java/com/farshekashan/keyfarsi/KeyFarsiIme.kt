@@ -348,10 +348,15 @@ class KeyFarsiIme : InputMethodService() {
             }
         }
 
+        val autoCorrect = prefs.getBoolean("auto_correct", true)
         if (currentWord.isNotBlank() && !isSensitiveInput() && !english) {
-            val remembered = rememberedCorrection(currentWord)
-            val typoMatches = if (remembered != null) listOf(remembered) else
-                rankedSpellMatches(currentWord, getLastCompletedWords()).take(3).map { m -> m.word }
+            val typoMatches = if (autoCorrect) {
+                val remembered = rememberedCorrection(currentWord)
+                if (remembered != null) listOf(remembered) else
+                    rankedSpellMatches(currentWord, getLastCompletedWords()).take(3).map { m -> m.word }
+            } else {
+                findSuggestions(currentWord).take(3)
+            }
             suggestions.addAll(0, typoMatches.filterNot { it in suggestions })
         }
         if (suggestions.size < 3 && currentWord.isNotBlank()) {
@@ -462,14 +467,13 @@ class KeyFarsiIme : InputMethodService() {
             val scale = prefs.getInt("standard_scale", 100).coerceIn(50, 150) / 100f
             val gapPx = if (stdGap >= 0) dp(stdGap) else dp(configuredGap)
             val removedKeys = if (!english) {
-    val removed = mutableSetOf<Char>()
-    if (prefs.getBoolean("merge_key_kaf", false)) removed.add('ک')
-    if (prefs.getBoolean("merge_key_gaf", false)) removed.add('گ')
-    if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
-    if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
-    removed
-} else emptySet()
-            
+                val removed = mutableSetOf<Char>()
+                if (prefs.getBoolean("merge_key_kaf", false)) removed.add('ک')
+                if (prefs.getBoolean("merge_key_gaf", false)) removed.add('گ')
+                if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
+                if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
+                removed
+            } else emptySet()
             val allChars = mutableListOf<Char>()
             rows.forEach { row -> row.forEach { ch -> if (ch !in removedKeys) allChars.add(ch) } }
             val columns = (allChars.size / 3).coerceAtLeast(6)
@@ -514,7 +518,6 @@ class KeyFarsiIme : InputMethodService() {
             bottom.addView(actionButton(t("key_globe"), keyBg, fg) { english = !english; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeightPx, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
             if (english) bottom.addView(actionButton(t("key_shift"), keyBg, fg) { uppercase = !uppercase; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeightPx, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
             bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeightPx, spaceWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
-            bottom.addView(actionButton(t("key_dot"), keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeightPx, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
             bottom.addView(actionButton(t("key_enter"), accent, Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeightPx, enterWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
             root.addView(bottom)
         } else {
@@ -635,7 +638,6 @@ class KeyFarsiIme : InputMethodService() {
         bottom.addView(actionButton(t("key_globe"), keyBg, fg) { english = !english; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight(), 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         if (english) bottom.addView(actionButton(t("key_shift"), keyBg, fg) { uppercase = !uppercase; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight(), 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeight(), spaceWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-        bottom.addView(actionButton(t("key_dot"), keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeight(), 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         bottom.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeight(), enterWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         root.addView(bottom)
     }
@@ -874,7 +876,8 @@ class KeyFarsiIme : InputMethodService() {
         val beforeCursor = currentInputConnection?.getTextBeforeCursor(1, 0)?.toString().orEmpty()
 
         var correctedCurrentWord = currentWord
-        if (value == " " && currentWord.length >= 2 && !english && !isSensitiveInput()) {
+        val autoCorrect = prefs.getBoolean("auto_correct", true)
+        if (autoCorrect && value == " " && currentWord.length >= 2 && !english && !isSensitiveInput()) {
             val ranked = rankedSpellMatches(currentWord, priorWords)
             val beforeWord = currentInputConnection?.getTextBeforeCursor(240, 0)?.toString().orEmpty()
             val semanticPrefix = beforeWord.removeSuffix(currentWord).trim()
