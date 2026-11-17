@@ -44,6 +44,8 @@ class KeyFarsiIme : InputMethodService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
+    private var suggestionRunnable: Runnable? = null
+    private var lastKeyTime = 0L
 
     private val prefs by lazy { getSharedPreferences("keyfarsi", MODE_PRIVATE) }
 
@@ -112,11 +114,17 @@ class KeyFarsiIme : InputMethodService() {
     )
 
     private val alternateChars: Map<String, List<String>> = mapOf(
-        "ا" to listOf("آ", "أ", "ء", "ئ"),
+        "ا" to listOf("آ", "أ", "إ", "ء", "ئ", "ؤ", "ۀ"),
         "ی" to listOf("ي", "ى", "ئ"),
         "ک" to listOf("گ"),
         "ه" to listOf("ة", "ۀ"),
+        "و" to listOf("ؤ"),
+        "ن" to listOf("ں"),
+        "ت" to listOf("ٹ"),
         "ر" to listOf("ژ"),
+        "د" to listOf("ڈ"),
+        "ز" to listOf("ذ"),
+        "س" to listOf("ص", "ث"),
         "گ" to listOf("ګ"),
         "a" to listOf("à", "á", "â", "ä", "å", "æ", "ā"),
         "e" to listOf("è", "é", "ê", "ë", "ē"),
@@ -127,7 +135,7 @@ class KeyFarsiIme : InputMethodService() {
         "n" to listOf("ñ", "ń", "ň"),
         "s" to listOf("ś", "š", "ş"),
         "z" to listOf("ź", "ž", "ż"),
-        "m" to listOf(".")
+        "y" to listOf("ý", "ÿ")
     )
 
     private val allSymbols = listOf(
@@ -163,12 +171,14 @@ class KeyFarsiIme : InputMethodService() {
     override fun onDestroy() {
         clipboard.removePrimaryClipChangedListener(clipboardListener)
         stopRepeat()
+        suggestionRunnable?.let { handler.removeCallbacks(it) }
         super.onDestroy()
     }
 
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         pendingSend = null
+        lastKeyTime = 0L
         saveClipboardCurrent()
     }
 
@@ -322,6 +332,14 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun refreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
+        suggestionRunnable?.let { handler.removeCallbacks(it) }
+        suggestionRunnable = Runnable {
+            doRefreshSuggestions(keyBg, fg)
+        }
+        handler.postDelayed(suggestionRunnable!!, 150L)
+    }
+
+    private fun doRefreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
         val row = suggestionRow ?: return
         row.removeAllViews()
         val dark = prefs.getBoolean("dark", false)
@@ -443,11 +461,20 @@ class KeyFarsiIme : InputMethodService() {
         return try { JSONObject(prefs.getString("bigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
     }
 
+    private fun getCustomMerge(char: String): String? {
+        return prefs.getString("custom_merge_$char", null)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun isCustomDelete(char: String): Boolean {
+        return prefs.getBoolean("custom_delete_$char", false)
+    }
+
     private fun buildLetterKeyboard(root: LinearLayout, keyBg: Int, fg: Int, accent: Int, actualWidth: Int) {
         val standardBig = prefs.getBoolean("standard_big_keyboard", false)
         val rows = if (english) englishRows else persianRows
 
-        val usableWidthPx = actualWidth - dp(8)
+        val letterSideMargin = prefs.getInt("letter_side_margin", 4).coerceIn(0, 20)
+        val usableWidthPx = actualWidth - dp(letterSideMargin * 2)
 
         val prefix = if (english) "en_" else "fa_"
         val rawKeyWidth = prefs.getInt("${prefix}key_width", 0)
@@ -473,6 +500,7 @@ class KeyFarsiIme : InputMethodService() {
                 if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
                 if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
                 if (prefs.getBoolean("merge_ta_za", false)) removed.add('ظ')
+                rows.forEach { row -> row.forEach { ch -> if (isCustomDelete(ch.toString())) removed.add(ch) } }
                 removed
             } else emptySet()
             val allChars = mutableListOf<Char>()
@@ -547,6 +575,7 @@ class KeyFarsiIme : InputMethodService() {
                 if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
                 if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
                 if (prefs.getBoolean("merge_ta_za", false)) removed.add('ظ')
+                rows.forEach { row -> row.forEach { ch -> if (isCustomDelete(ch.toString())) removed.add(ch) } }
                 removed
             } else emptySet()
 
@@ -611,8 +640,10 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
+        val customMerge = getCustomMerge(text)
         val hasAlternates = (alternateChars[text.lowercase()] ?: alternateChars[text])?.isNotEmpty() == true ||
-                (text == "ط" && prefs.getBoolean("merge_ta_za", false))
+                (text == "ط" && prefs.getBoolean("merge_ta_za", false)) ||
+                customMerge != null
 
         val base = keyButton(text, bg, fg) { click() }
         base.layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
@@ -872,6 +903,8 @@ class KeyFarsiIme : InputMethodService() {
             setOnClickListener { click() }
             var alternates = alternateChars[text.lowercase()] ?: alternateChars[text]
             if (text == "ط" && prefs.getBoolean("merge_ta_za", false)) alternates = listOf("ظ")
+            val customMerge = getCustomMerge(text)
+            if (customMerge != null) alternates = listOf(customMerge)
             if (!alternates.isNullOrEmpty()) {
                 if (alternates.size == 1) {
                     setOnLongClickListener {
@@ -935,47 +968,60 @@ class KeyFarsiIme : InputMethodService() {
     private fun refreshKeyboard() {
         suggestionRow = null
         stopRepeat()
+        suggestionRunnable?.let { handler.removeCallbacks(it) }
         setInputView(buildKeyboard())
     }
 
     private fun commit(value: String) {
+        val now = System.currentTimeMillis()
+        val timeSinceLastKey = if (lastKeyTime == 0L) Long.MAX_VALUE else now - lastKeyTime
+        lastKeyTime = now
+
+        val ic = currentInputConnection ?: return
+
+        val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
+        if (!isWordBoundary) {
+            val beforeCursor = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+            if (beforeCursor.isNotEmpty() && beforeCursor.last().isDigit() && value.firstOrNull()?.isLetter() == true) {
+                ic.commitText(" ", 1)
+            }
+            val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
+            ic.commitText(finalValue, 1)
+            if (value == " ") uppercase = false
+            refreshSuggestions()
+            return
+        }
+
         val currentWord = getCurrentWord()
         val priorWords = getLastCompletedWords()
         val lastWord = priorWords.firstOrNull().orEmpty()
-        val beforeCursor = currentInputConnection?.getTextBeforeCursor(1, 0)?.toString().orEmpty()
 
         var correctedCurrentWord = currentWord
         val autoCorrect = prefs.getBoolean("auto_correct", true)
-        if (autoCorrect && value == " " && currentWord.length >= 2 && !english && !isSensitiveInput()) {
+        val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 800).toLong()
+        val isSlowTyping = timeSinceLastKey > slowTypingThreshold
+        if (autoCorrect && value == " " && currentWord.length >= 2 && !english && !isSensitiveInput() && !isSlowTyping) {
             val ranked = rankedSpellMatches(currentWord, priorWords)
-            val beforeWord = currentInputConnection?.getTextBeforeCursor(240, 0)?.toString().orEmpty()
+            val beforeWord = ic.getTextBeforeCursor(240, 0)?.toString().orEmpty()
             val semanticPrefix = beforeWord.removeSuffix(currentWord).trim()
             val correction = rememberedCorrection(currentWord)
                 ?: PersianAlBertSemanticModel.confidentCorrection(this, semanticPrefix, ranked)
                 ?: PersianNeuralContextModel.confidentCorrection(prefs, currentWord, ranked, priorWords)
                 ?: PersianSpellChecker.confidentCorrection(currentWord, spellCandidates(priorWords), ranked)
             if (correction != null && PersianSpellChecker.normalize(correction) != PersianSpellChecker.normalize(currentWord)) {
-                val ic = currentInputConnection
-                ic?.deleteSurroundingText(currentWord.length, 0)
-                ic?.commitText(correction, 1)
+                ic.deleteSurroundingText(currentWord.length, 0)
+                ic.commitText(correction, 1)
                 correctedCurrentWord = correction
                 learnWord(correction)
             }
         }
-        if (value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")) {
-            if (lastWord.isNotBlank() && correctedCurrentWord.isNotBlank()) {
-                saveBigram(lastWord, correctedCurrentWord)
-                if (priorWords.size >= 2) saveTrigram(priorWords[1], priorWords[0], correctedCurrentWord)
-            }
-            learnWord(correctedCurrentWord)
+        if (lastWord.isNotBlank() && correctedCurrentWord.isNotBlank()) {
+            saveBigram(lastWord, correctedCurrentWord)
+            if (priorWords.size >= 2) saveTrigram(priorWords[1], priorWords[0], correctedCurrentWord)
         }
+        learnWord(correctedCurrentWord)
 
-        if (beforeCursor.isNotEmpty() && beforeCursor.last().isDigit() && value.firstOrNull()?.isLetter() == true) {
-            currentInputConnection?.commitText(" ", 1)
-        }
-
-        val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
-        currentInputConnection?.commitText(finalValue, 1)
+        ic.commitText(value, 1)
         if (value == " ") uppercase = false
         refreshSuggestions()
     }
