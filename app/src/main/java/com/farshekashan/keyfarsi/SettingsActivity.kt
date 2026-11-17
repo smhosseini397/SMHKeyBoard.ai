@@ -434,6 +434,7 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 48, 30, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
         addNumberField(outer, "حاشیه امن (پیکسل)", "keyboard_padding", 2, 1, 5)
+        addNumberField(outer, "حاشیه طرفین ردیف حروف (dp) - ۰ برای خودکار", "letter_side_margin", 4, 0, 20)
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
 
@@ -562,6 +563,7 @@ class SettingsActivity : Activity() {
                     .putInt("standard_key_gap", -1)
                     .putInt("standard_scale", 100)
                     .putInt("keyboard_padding", 2)
+                    .putInt("letter_side_margin", 4)
                     .putBoolean("merge_key_kaf", false)
                     .putBoolean("merge_key_gaf", false)
                     .putBoolean("merge_key_re", false)
@@ -692,4 +694,16 @@ class SettingsActivity : Activity() {
 
         parent.addView(row)
     }
+
+    private val persianRows = listOf(
+        "ضصثقفغعهخحجچ",
+        "شسیبلاتنمکگ",
+        "ظطزرژذدپو"
+    )
+
+    private val englishRows = listOf(
+        "qwertyuiop",
+        "asdfghjkl",
+        "zxcvbnm"
+    )
 }
