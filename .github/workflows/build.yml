@@ -1,0 +1,102 @@
+name: Build KeyFarsi Android APK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build KeyFarsi APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK Packages
+        run: |
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Setup Python for pretrained Persian model export
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download and export pretrained Persian ALBERT to ONNX
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install transformers==4.53.1 sentencepiece==0.2.0 onnx==1.17.0 safetensors==0.5.3
+          python scripts/export_persian_albert_onnx.py
+          test -s app/src/main/assets/semantic/albert_persian_mlm.onnx
+          test -s app/src/main/assets/semantic/spiece.model
+          test -s app/src/main/assets/semantic/special_tokens.json
+
+      - name: Verify bundled learning resources
+        run: |
+          test -s KeyFarsi-Learning/learning_profile_template.json
+          test -s KeyFarsi-Learning/learning_profile.schema.json
+          test -s KeyFarsi-Learning/seed_corrections.json
+          test -s app/src/main/assets/learning/learning_profile_template.json
+          test -s app/src/main/assets/learning/learning_profile.schema.json
+          test -s app/src/main/assets/learning/seed_corrections.json
+          test -s app/src/main/assets/semantic/model_manifest.json
+          cmp KeyFarsi-Learning/learning_profile_template.json app/src/main/assets/learning/learning_profile_template.json
+          cmp KeyFarsi-Learning/learning_profile.schema.json app/src/main/assets/learning/learning_profile.schema.json
+          cmp KeyFarsi-Learning/seed_corrections.json app/src/main/assets/learning/seed_corrections.json
+
+      - name: Build Debug APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Verify APK
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeyFarsi-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Build Reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/
+            app/build/outputs/logs/
+          if-no-files-found: ignore
+          retention-days: 7
