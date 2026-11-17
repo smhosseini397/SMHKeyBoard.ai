@@ -19,11 +19,13 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.json.JSONObject
 
 class SettingsActivity : Activity() {
     companion object {
         private const val REQUEST_EXPORT_LEARNING = 7101
         private const val REQUEST_IMPORT_LEARNING = 7102
+        private const val PREFS_CUSTOM_MERGES = "custom_merges"
     }
     private val prefs by lazy { getSharedPreferences("keyfarsi", MODE_PRIVATE) }
 
@@ -136,6 +138,44 @@ class SettingsActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // کمکی‌های ادغام سفارشی (JSON یکپارچه)
+    // ---------------------------------------------------------------------
+    private fun readCustomMerges(): JSONObject {
+        val raw = prefs.getString(PREFS_CUSTOM_MERGES, null)
+        return try {
+            if (raw.isNullOrBlank()) JSONObject() else JSONObject(raw)
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    private fun writeCustomMerges(obj: JSONObject) {
+        prefs.edit().putString(PREFS_CUSTOM_MERGES, obj.toString()).apply()
+    }
+
+    private fun saveCustomMerge(key: String, alt: String, delete: Boolean) {
+        val merges = readCustomMerges()
+        if (alt.isBlank() && !delete) {
+            merges.remove(key)
+        } else {
+            merges.put(key, JSONObject().apply {
+                put("alt", alt)
+                put("delete", delete)
+            })
+        }
+        writeCustomMerges(merges)
+    }
+
+    private fun removeCustomMerge(key: String) {
+        val merges = readCustomMerges()
+        merges.remove(key)
+        writeCustomMerges(merges)
+    }
+
+    // ---------------------------------------------------------------------
+    // تب عمومی
+    // ---------------------------------------------------------------------
     private fun createGeneralTab(): LinearLayout {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -279,6 +319,9 @@ class SettingsActivity : Activity() {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // تب استاندارد
+    // ---------------------------------------------------------------------
     private fun createStandardTab(): LinearLayout {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -352,6 +395,9 @@ class SettingsActivity : Activity() {
         return outer
     }
 
+    // ---------------------------------------------------------------------
+    // تب انگلیسی
+    // ---------------------------------------------------------------------
     private fun createEnglishTab(): LinearLayout {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -378,6 +424,9 @@ class SettingsActivity : Activity() {
         return outer
     }
 
+    // ---------------------------------------------------------------------
+    // تب تم و ظاهر
+    // ---------------------------------------------------------------------
     private fun createThemeTab(): LinearLayout {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -433,8 +482,10 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "عرض دکمه‌ها (dp) - ۰ برای خودکار", "fa_key_width", 0, 0, 200)
         addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 48, 30, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
-        addNumberField(outer, "حاشیه امن (پیکسل)", "keyboard_padding", 2, 1, 5)
-        addNumberField(outer, "حاشیه طرفین ردیف حروف (dp) - ۰ برای خودکار", "letter_side_margin", 4, 0, 20)
+        // حاشیه امن: حالا از ۰ قابل تنظیم است
+        addNumberField(outer, "حاشیه امن (پیکسل)", "keyboard_padding", 2, 0, 5)
+        // حاشیه طرفین: حالا منفی هم مجاز است تا به دیواره بچسبد
+        addNumberField(outer, "حاشیه طرفین ردیف حروف (dp) - منفی = چسبیده به دیواره", "letter_side_margin", 4, -40, 20)
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
 
@@ -471,9 +522,12 @@ class SettingsActivity : Activity() {
         })
         addNumberField(outer, "جابه‌جایی عمودی (dp) - ۱۰۰- تا ۲۰۰", "keyboard_vertical_offset", 0, -100, 200)
 
+        // -----------------------------------------------------------------
+        // ادغام هر دکمه (سفارشی) — ذخیره در JSON یکپارچه
+        // -----------------------------------------------------------------
         outer.addView(sectionTitle("ادغام هر دکمه (سفارشی)"))
         outer.addView(TextView(this).apply {
-            text = "برای هر دکمه می‌توانید حرف جایگزین تعیین کنید (با نگه‌داشتن دکمه، آن حرف تایپ می‌شود). خالی = بدون جایگزین.\nمثال: دکمه «م» → جایگزین «.»"
+            text = "برای هر دکمه می‌توانید حرف جایگزین تعیین کنید (با نگه‌داشتن دکمه، آن حرف تایپ می‌شود). خالی = بدون جایگزین.\nمثال: دکمه «م» → جایگزین «.»\nاین تنظیمات در فایل custom_merges ذخیره می‌شود و کیبورد از همان می‌خواند."
             textSize = 13f
             setTextColor(0xFF514B5D.toInt())
             setPadding(0, dp(4), 0, dp(10))
@@ -514,12 +568,34 @@ class SettingsActivity : Activity() {
         }
         outer.addView(deleteCheck)
 
+        // وقتی کاربر دکمه را عوض می‌کند، مقادیر ذخیره‌شده را نشان بده
+        fun loadSelectedKeyState(key: String) {
+            val merges = readCustomMerges()
+            val obj = merges.optJSONObject(key)
+            if (obj != null) {
+                altInput.setText(obj.optString("alt", ""))
+                deleteCheck.isChecked = obj.optBoolean("delete", false)
+            } else {
+                altInput.setText("")
+                deleteCheck.isChecked = false
+            }
+        }
+
+        keySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                loadSelectedKeyState(allKeys[position])
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         val saveCustom = Button(this).apply {
             text = "ذخیره ادغام سفارشی"
             setOnClickListener {
                 val selectedKey = keySpinner.selectedItem as String
                 val alt = altInput.text.toString().trim()
                 val shouldDelete = deleteCheck.isChecked
+                saveCustomMerge(selectedKey, alt, shouldDelete)
+                // سازگاری با نسخه قدیمی (اگر سرویس قدیمی این کلیدها را می‌خواند)
                 if (alt.isBlank()) {
                     prefs.edit().remove("custom_merge_$selectedKey").apply()
                 } else {
@@ -535,13 +611,19 @@ class SettingsActivity : Activity() {
             text = "حذف ادغام سفارشی دکمه انتخابی"
             setOnClickListener {
                 val selectedKey = keySpinner.selectedItem as String
+                removeCustomMerge(selectedKey)
                 prefs.edit().remove("custom_merge_$selectedKey").apply()
                 prefs.edit().remove("custom_delete_$selectedKey").apply()
+                altInput.setText("")
+                deleteCheck.isChecked = false
                 Toast.makeText(this@SettingsActivity, "ادغام «$selectedKey» حذف شد", Toast.LENGTH_SHORT).show()
             }
         }
         outer.addView(deleteCustom, match())
 
+        // -----------------------------------------------------------------
+        // بازنشانی
+        // -----------------------------------------------------------------
         val reset = Button(this).apply {
             text = "بازنشانی همه تنظیمات به پیش‌فرض"
             setOnClickListener {
@@ -581,6 +663,7 @@ class SettingsActivity : Activity() {
                     .putBoolean("dark", false)
                     .putString("theme", "default")
                     .putBoolean("standard_big_keyboard", false)
+                    .remove(PREFS_CUSTOM_MERGES)
                     .apply()
                 Toast.makeText(this@SettingsActivity, "تنظیمات بازنشانی شد", Toast.LENGTH_SHORT).show()
                 recreate()
