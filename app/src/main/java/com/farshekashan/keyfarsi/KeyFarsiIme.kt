@@ -1051,7 +1051,7 @@ class KeyFarsiIme : InputMethodService() {
             setPadding(dp(10), dp(8), dp(10), dp(8))
             background = createKeyBackground(card)
         })
-        scroll.addView(previewContent, ScrollView.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        scroll.addView(previewContent, FrameLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
             setMargins(0, dp(3), 0, dp(8))
         })
