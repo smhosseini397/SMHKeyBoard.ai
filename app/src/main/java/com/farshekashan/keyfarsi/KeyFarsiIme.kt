@@ -1006,94 +1006,94 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-   private fun buildSendReviewView(original: String, corrected: String): View {
-    val dark = prefs.getBoolean("dark", false)
-    val backgroundColor = if (dark) Color.rgb(29, 29, 35) else Color.rgb(232, 228, 239)  // ← تغییر کرد
-    val foreground = if (dark) Color.WHITE else Color.rgb(38, 34, 47)
-    val card = if (dark) Color.rgb(57, 55, 66) else Color.WHITE
-    val accent = Color.rgb(103, 80, 164)
-    val root = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(dp(12), dp(8), dp(12), dp(8) + getNavigationBarHeight())
-        setBackgroundColor(backgroundColor)  // ← تغییر کرد
-        layoutParams = LinearLayout.LayoutParams(resources.displayMetrics.widthPixels, dp(280))
-    }
-    root.addView(TextView(this).apply {
-        text = "بازبینی متن پیش از ارسال"
-        textSize = 16f
-        setTypeface(null, Typeface.BOLD)
-        setTextColor(foreground)
-        gravity = Gravity.CENTER
-        setPadding(0, dp(4), 0, dp(8))
-    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38)))
+       private fun buildSendReviewView(original: String, corrected: String): View {
+        val dark = prefs.getBoolean("dark", false)
+        val backgroundColor = if (dark) Color.rgb(29, 29, 35) else Color.rgb(232, 228, 239)
+        val foreground = if (dark) Color.WHITE else Color.rgb(38, 34, 47)
+        val card = if (dark) Color.rgb(57, 55, 66) else Color.WHITE
+        val accent = Color.rgb(103, 80, 164)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(8), dp(12), dp(8) + getNavigationBarHeight())
+            setBackgroundColor(backgroundColor)
+            layoutParams = LinearLayout.LayoutParams(resources.displayMetrics.widthPixels, dp(280))
+        }
+        root.addView(TextView(this).apply {
+            text = "بازبینی متن پیش از ارسال"
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(foreground)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(8))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)))
 
-    val scroll = ScrollView(this)
-    val previewContent = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(2), dp(2), dp(2), dp(2))
-    }
-    previewContent.addView(TextView(this).apply {
-        text = "متن فعلی"
-        textSize = 12f
-        setTextColor(foreground)
-        setTypeface(null, Typeface.BOLD)
-        gravity = Gravity.RIGHT
-        setPadding(dp(4), dp(2), dp(4), dp(4))
-    })
-    previewContent.addView(TextView(this).apply {
-        text = original
-        textSize = 14f
-        setTextColor(foreground)
-        gravity = Gravity.RIGHT
-        textDirection = View.TEXT_DIRECTION_RTL
-        setPadding(dp(10), dp(8), dp(10), dp(8))
-        background = createKeyBackground(card)
-    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-        setMargins(0, 0, 0, dp(8))
-    })
-    previewContent.addView(TextView(this).apply {
-        text = "متن اصلاح‌شده"
-        textSize = 12f
-        setTextColor(foreground)
-        setTypeface(null, Typeface.BOLD)
-        gravity = Gravity.RIGHT
-        setPadding(dp(4), dp(2), dp(4), dp(4))
-    })
-    previewContent.addView(TextView(this).apply {
-        text = corrected
-        textSize = 16f
-        setTextColor(foreground)
-        gravity = Gravity.RIGHT
-        textDirection = View.TEXT_DIRECTION_RTL
-        setPadding(dp(10), dp(8), dp(10), dp(8))
-        background = createKeyBackground(card)
-    })
-    scroll.addView(previewContent, ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-    root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
-        setMargins(0, dp(3), 0, dp(8))
-    })
+        val scroll = ScrollView(this)
+        val previewContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+        }
+        previewContent.addView(TextView(this).apply {
+            text = "متن فعلی"
+            textSize = 12f
+            setTextColor(foreground)
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.RIGHT
+            setPadding(dp(4), dp(2), dp(4), dp(4))
+        })
+        previewContent.addView(TextView(this).apply {
+            text = original
+            textSize = 14f
+            setTextColor(foreground)
+            gravity = Gravity.RIGHT
+            textDirection = View.TEXT_DIRECTION_RTL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = createKeyBackground(card)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(0, 0, 0, dp(8))
+        })
+        previewContent.addView(TextView(this).apply {
+            text = "متن اصلاح‌شده"
+            textSize = 12f
+            setTextColor(foreground)
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.RIGHT
+            setPadding(dp(4), dp(2), dp(4), dp(4))
+        })
+        previewContent.addView(TextView(this).apply {
+            text = corrected
+            textSize = 16f
+            setTextColor(foreground)
+            gravity = Gravity.RIGHT
+            textDirection = View.TEXT_DIRECTION_RTL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = createKeyBackground(card)
+        })
+        scroll.addView(previewContent, ScrollView.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            setMargins(0, dp(3), 0, dp(8))
+        })
 
-    val actions = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        actions.addView(actionButton("تأیید و ارسال", accent, Color.WHITE) {
+            applyCorrectionAndSend()
+        }, LinearLayout.LayoutParams(0, dp(46), 1.25f).apply { setMargins(dp(2), 0, dp(2), 0) })
+        actions.addView(actionButton("ویرایش", card, foreground) {
+            pendingSend = null
+            refreshKeyboard()
+        }, LinearLayout.LayoutParams(0, dp(46), 0.8f).apply { setMargins(dp(2), 0, dp(2), 0) })
+        actions.addView(actionButton("ارسال اصلی", card, foreground) {
+            val pending = pendingSend
+            pendingSend = null
+            if (pending != null) currentInputConnection?.performEditorAction(pending.action)
+        }, LinearLayout.LayoutParams(0, dp(46), 0.9f).apply { setMargins(dp(2), 0, dp(2), 0) })
+        root.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)))
+        keyboardRoot = root
+        return root
     }
-    actions.addView(actionButton("تأیید و ارسال", accent, Color.WHITE) {
-        applyCorrectionAndSend()
-    }, LinearLayout.LayoutParams(0, dp(46), 1.25f).apply { setMargins(dp(2), 0, dp(2), 0) })
-    actions.addView(actionButton("ویرایش", card, foreground) {
-        pendingSend = null
-        refreshKeyboard()
-    }, LinearLayout.LayoutParams(0, dp(46), 0.8f).apply { setMargins(dp(2), 0, dp(2), 0) })
-    actions.addView(actionButton("ارسال اصلی", card, foreground) {
-        val pending = pendingSend
-        pendingSend = null
-        if (pending != null) currentInputConnection?.performEditorAction(pending.action)
-    }, LinearLayout.LayoutParams(0, dp(46), 0.9f).apply { setMargins(dp(2), 0, dp(2), 0) })
-    root.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)))
-    keyboardRoot = root
-    return root
-}
     private fun applyCorrectionAndSend() {
         val pending = pendingSend ?: return
         val ic = currentInputConnection ?: run { pendingSend = null; refreshKeyboard(); return }
