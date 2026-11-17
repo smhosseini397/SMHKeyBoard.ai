@@ -206,6 +206,7 @@ class SettingsActivity : Activity() {
             setTextColor(0xFF8A8399.toInt())
             setPadding(0, dp(4), 0, dp(8))
         })
+        addNumberField(outer, "آستانه تایپ آرام (میلی‌ثانیه) - بیشتر = تصحیح کمتر", "slow_typing_threshold", 800, 200, 2000)
 
         outer.addView(sectionTitle("ادغام کلیدها (قابل تنظیم در هر دو حالت)"))
         outer.addView(TextView(this).apply {
@@ -429,8 +430,6 @@ class SettingsActivity : Activity() {
         outer.addView(spinner, match())
 
         outer.addView(sectionTitle("اندازه و چیدمان کیبورد"))
-        addNumberField(outer, "عرض کیبورد فارسی (dp)", "fa_keyboard_width", 360, 0, 1200)
-        addNumberField(outer, "ارتفاع کل کیبورد فارسی (dp)", "fa_keyboard_height", 270, 150, 800)
         addNumberField(outer, "عرض دکمه‌ها (dp) - ۰ برای خودکار", "fa_key_width", 0, 0, 200)
         addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 48, 30, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
@@ -471,12 +470,81 @@ class SettingsActivity : Activity() {
         })
         addNumberField(outer, "جابه‌جایی عمودی (dp) - ۱۰۰- تا ۲۰۰", "keyboard_vertical_offset", 0, -100, 200)
 
+        outer.addView(sectionTitle("ادغام هر دکمه (سفارشی)"))
+        outer.addView(TextView(this).apply {
+            text = "برای هر دکمه می‌توانید حرف جایگزین تعیین کنید (با نگه‌داشتن دکمه، آن حرف تایپ می‌شود). خالی = بدون جایگزین.\nمثال: دکمه «م» → جایگزین «.»"
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+
+        val allKeys = buildList {
+            addAll(persianRows.flatMap { it.toList() }.map { it.toString() })
+            addAll(englishRows.flatMap { it.toList() }.map { it.toString() })
+        }.distinct()
+
+        val keySpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@SettingsActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                allKeys
+            )
+        }
+        outer.addView(TextView(this).apply {
+            text = "انتخاب دکمه:"
+            textSize = 13f
+            setTextColor(0xFF332B45.toInt())
+        })
+        outer.addView(keySpinner, match())
+
+        val altInput = EditText(this).apply {
+            hint = "حرف جایگزین (خالی = حذف)"
+            setSingleLine(true)
+        }
+        outer.addView(TextView(this).apply {
+            text = "حرف جایگزین:"
+            textSize = 13f
+            setTextColor(0xFF332B45.toInt())
+        })
+        outer.addView(altInput, match())
+
+        val deleteCheck = CheckBox(this).apply {
+            text = "حذف دکمه اصلی از کیبورد"
+        }
+        outer.addView(deleteCheck)
+
+        val saveCustom = Button(this).apply {
+            text = "ذخیره ادغام سفارشی"
+            setOnClickListener {
+                val selectedKey = keySpinner.selectedItem as String
+                val alt = altInput.text.toString().trim()
+                val shouldDelete = deleteCheck.isChecked
+                if (alt.isBlank()) {
+                    prefs.edit().remove("custom_merge_$selectedKey").apply()
+                } else {
+                    prefs.edit().putString("custom_merge_$selectedKey", alt).apply()
+                }
+                prefs.edit().putBoolean("custom_delete_$selectedKey", shouldDelete).apply()
+                Toast.makeText(this@SettingsActivity, "ادغام «$selectedKey» ذخیره شد", Toast.LENGTH_SHORT).show()
+            }
+        }
+        outer.addView(saveCustom, match())
+
+        val deleteCustom = Button(this).apply {
+            text = "حذف ادغام سفارشی دکمه انتخابی"
+            setOnClickListener {
+                val selectedKey = keySpinner.selectedItem as String
+                prefs.edit().remove("custom_merge_$selectedKey").apply()
+                prefs.edit().remove("custom_delete_$selectedKey").apply()
+                Toast.makeText(this@SettingsActivity, "ادغام «$selectedKey» حذف شد", Toast.LENGTH_SHORT).show()
+            }
+        }
+        outer.addView(deleteCustom, match())
+
         val reset = Button(this).apply {
             text = "بازنشانی همه تنظیمات به پیش‌فرض"
             setOnClickListener {
                 prefs.edit()
-                    .putInt("fa_keyboard_width", 360)
-                    .putInt("fa_keyboard_height", 270)
                     .putInt("en_keyboard_width", 360)
                     .putInt("en_keyboard_height", 270)
                     .putInt("keyboard_width_landscape", 0)
@@ -506,6 +574,7 @@ class SettingsActivity : Activity() {
                     .putInt("keyboard_vertical_offset", 0)
                     .putInt("space_weight", 3)
                     .putInt("enter_weight", 15)
+                    .putInt("slow_typing_threshold", 800)
                     .putBoolean("auto_correct", true)
                     .putBoolean("dark", false)
                     .putString("theme", "default")
