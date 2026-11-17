@@ -225,6 +225,34 @@ class SettingsActivity : Activity() {
             setPadding(0, dp(4), 0, dp(8))
         })
 
+        outer.addView(sectionTitle("ادغام کلیدها (قابل تنظیم در هر دو حالت)"))
+        outer.addView(TextView(this).apply {
+            text = "با فعال کردن هر گزینه، آن کلید از کیبورد حذف می‌شود. این تنظیم در هر دو تب عمومی و استاندارد مشترک است."
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        listOf(
+            "merge_key_kaf" to "حذف کلید «ک»",
+            "merge_key_gaf" to "حذف کلید «گ»",
+            "merge_key_re" to "حذف کلید «ر»",
+            "merge_key_zhe" to "حذف کلید «ژ»"
+        ).forEach { (key, label) ->
+            val cb = CheckBox(this).apply {
+                text = label
+                isChecked = prefs.getBoolean(key, false)
+                setOnCheckedChangeListener { _, checked ->
+                    prefs.edit().putBoolean(key, checked).apply()
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "برای اعمال تغییرات، کیبورد را ببندید و دوباره باز کنید",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            outer.addView(cb)
+        }
+
         outer.addView(sectionTitle("تنظیمات عمومی (حالت افقی)"))
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
@@ -301,20 +329,19 @@ class SettingsActivity : Activity() {
         }
         outer.addView(standardBig)
 
-        outer.addView(sectionTitle("ادغام کلیدهای هم‌خانواده (فقط در کیبورد استاندارد فعال)"))
-
+        outer.addView(sectionTitle("ادغام کلیدهای هم‌خانواده"))
         outer.addView(TextView(this).apply {
-            text = "با فعال کردن هر گزینه، کلید حذف می‌شود و با نگه‌داشتن کلید اصلی، کاراکتر جایگزین تایپ می‌شود.\nمثال: با ادغام «گ» در «ک»، کلید گ حذف شده و با نگه‌داشتن «ک» حرف «گ» تایپ می‌شود."
+            text = "با فعال کردن هر گزینه، آن کلید از کیبورد استاندارد حذف می‌شود. این تنظیم با تب عمومی مشترک است."
             textSize = 13f
             setTextColor(0xFF514B5D.toInt())
             setPadding(0, dp(4), 0, dp(12))
         })
 
         val mergeKeyOptions = listOf(
-            "merge_key_kaf" to "ادغام «ک» (ک → گ)",
-            "merge_key_gaf" to "ادغام «گ» (گ → ک)",
-            "merge_key_re" to "ادغام «ر» (ر → ژ)",
-            "merge_key_zhe" to "ادغام «ژ» (ژ → ر)"
+            "merge_key_kaf" to "حذف کلید «ک»",
+            "merge_key_gaf" to "حذف کلید «گ»",
+            "merge_key_re" to "حذف کلید «ر»",
+            "merge_key_zhe" to "حذف کلید «ژ»"
         )
 
         mergeKeyOptions.forEach { (key, label) ->
