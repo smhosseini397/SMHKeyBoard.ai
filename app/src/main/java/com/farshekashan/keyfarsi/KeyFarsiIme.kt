@@ -517,15 +517,24 @@ class KeyFarsiIme : InputMethodService() {
             bottom.addView(actionButton(t("key_enter"), accent, Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeightPx, enterWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
             root.addView(bottom)
         } else {
-            val keyWidthPx = dp(configuredKeyWidth)
-            val gapPx = dp(configuredGap)
-            val effectiveKeyHeight = dp(configuredKeyHeight)
+    val keyWidthPx = dp(configuredKeyWidth)
+    val gapPx = dp(configuredGap)
+    val effectiveKeyHeight = dp(configuredKeyHeight)
 
-            val maxColumns = ((usableWidthPx + gapPx) / (keyWidthPx + gapPx * 2)).coerceAtLeast(1)
-            
-            val allChars = mutableListOf<Char>()
-            rows.forEach { row -> row.forEach { ch -> allChars.add(ch) } }
-            val chunks = allChars.chunked(maxColumns)
+    val maxColumns = ((usableWidthPx + gapPx) / (keyWidthPx + gapPx * 2)).coerceAtLeast(1)
+
+    val removedKeys = if (!english) {
+        val removed = mutableSetOf<Char>()
+        if (prefs.getBoolean("merge_key_kaf", false)) removed.add('ک')
+        if (prefs.getBoolean("merge_key_gaf", false)) removed.add('گ')
+        if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
+        if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
+        removed
+    } else emptySet()
+
+    val allChars = mutableListOf<Char>()
+    rows.forEach { row -> row.forEach { ch -> if (ch !in removedKeys) allChars.add(ch) } }
+    val chunks = allChars.chunked(maxColumns)
 
             chunks.forEachIndexed { index, chunk ->
                 val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
