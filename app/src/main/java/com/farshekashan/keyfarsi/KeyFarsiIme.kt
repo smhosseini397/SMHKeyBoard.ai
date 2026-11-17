@@ -461,8 +461,15 @@ class KeyFarsiIme : InputMethodService() {
             val stdGap = prefs.getInt("standard_key_gap", -1)
             val scale = prefs.getInt("standard_scale", 100).coerceIn(50, 150) / 100f
             val gapPx = if (stdGap >= 0) dp(stdGap) else dp(configuredGap)
-            val mergeKeys = prefs.getBoolean("merge_keys", false)
-            val removedKeys = if (mergeKeys && !english) setOf('ک', 'گ', 'ر', 'ژ') else emptySet()
+            val removedKeys = if (!english) {
+    val removed = mutableSetOf<Char>()
+    if (prefs.getBoolean("merge_key_kaf", false)) removed.add('ک')
+    if (prefs.getBoolean("merge_key_gaf", false)) removed.add('گ')
+    if (prefs.getBoolean("merge_key_re", false)) removed.add('ر')
+    if (prefs.getBoolean("merge_key_zhe", false)) removed.add('ژ')
+    removed
+} else emptySet()
+            
             val allChars = mutableListOf<Char>()
             rows.forEach { row -> row.forEach { ch -> if (ch !in removedKeys) allChars.add(ch) } }
             val columns = (allChars.size / 3).coerceAtLeast(6)
