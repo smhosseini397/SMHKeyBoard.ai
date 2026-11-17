@@ -199,6 +199,16 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
         addNumberField(outer, "حاشیه امن (پیکسل) - برای جلوگیری از بیرون‌زدگی دکمه‌ها", "keyboard_padding", 2, 1, 5)
 
+        outer.addView(sectionTitle("اندازه دکمه‌های فاصله و اینتر"))
+        outer.addView(TextView(this).apply {
+            text = "مقدار بزرگ‌تر = دکمه پهن‌تر. این تنظیم در هر دو حالت کیبورد (عادی و استاندارد) اعمال می‌شود."
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        addNumberField(outer, "وزن دکمه فاصله (۱ تا ۸)", "space_weight", 3, 1, 8)
+        addNumberField(outer, "وزن دکمه اینتر (۱۰ تا ۲۵ - تقسیم بر ۱۰ می‌شود)", "enter_weight", 15, 10, 25)
+
         outer.addView(sectionTitle("تنظیمات عمومی (حالت افقی)"))
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
@@ -275,7 +285,6 @@ class SettingsActivity : Activity() {
         }
         outer.addView(standardBig)
 
-        // ========== بخش جدید: ادغام کلیدها (جداگانه) ==========
         outer.addView(sectionTitle("ادغام کلیدهای هم‌خانواده (فقط در کیبورد استاندارد فعال)"))
 
         outer.addView(TextView(this).apply {
@@ -286,13 +295,13 @@ class SettingsActivity : Activity() {
         })
 
         val mergeKeyOptions = listOf(
-            Triple("merge_key_kaf", "ادغام «ک» (ک → گ)", "گ"),
-            Triple("merge_key_gaf", "ادغام «گ» (گ → ک)", "ک"),
-            Triple("merge_key_re", "ادغام «ر» (ر → ژ)", "ژ"),
-            Triple("merge_key_zhe", "ادغام «ژ» (ژ → ر)", "ر")
+            "merge_key_kaf" to "ادغام «ک» (ک → گ)",
+            "merge_key_gaf" to "ادغام «گ» (گ → ک)",
+            "merge_key_re" to "ادغام «ر» (ر → ژ)",
+            "merge_key_zhe" to "ادغام «ژ» (ژ → ر)"
         )
 
-        mergeKeyOptions.forEach { (key, label, _) ->
+        mergeKeyOptions.forEach { (key, label) ->
             val cb = CheckBox(this).apply {
                 text = label
                 isChecked = prefs.getBoolean(key, false)
@@ -307,17 +316,6 @@ class SettingsActivity : Activity() {
             }
             outer.addView(cb)
         }
-
-        // ========== بخش جدید: اندازه دکمه‌های Space و Enter ==========
-        outer.addView(sectionTitle("اندازه دکمه‌های فاصله و اینتر"))
-        outer.addView(TextView(this).apply {
-            text = "مقدار بزرگ‌تر = دکمه پهن‌تر. این تنظیم در هر دو حالت استاندارد و عادی اعمال می‌شود."
-            textSize = 13f
-            setTextColor(0xFF514B5D.toInt())
-            setPadding(0, dp(4), 0, dp(10))
-        })
-        addNumberField(outer, "وزن دکمه فاصله (۱ تا ۸)", "space_weight", 3, 1, 8)
-        addNumberField(outer, "وزن دکمه اینتر (۱۰ تا ۲۵ - تقسیم بر ۱۰ می‌شود)", "enter_weight", 15, 10, 25)
 
         outer.addView(sectionTitle("تنظیمات اندازه کیبورد استاندارد"))
         addNumberField(outer, "عرض کیبورد استاندارد (dp) - ۰ برای خودکار", "standard_keyboard_width", 0, 0, 1200)
@@ -430,7 +428,6 @@ class SettingsActivity : Activity() {
                     .putInt("standard_key_gap", -1)
                     .putInt("standard_scale", 100)
                     .putInt("keyboard_padding", 2)
-                    // ✅ بازنشانی گزینه‌های جدید
                     .putBoolean("merge_key_kaf", false)
                     .putBoolean("merge_key_gaf", false)
                     .putBoolean("merge_key_re", false)
