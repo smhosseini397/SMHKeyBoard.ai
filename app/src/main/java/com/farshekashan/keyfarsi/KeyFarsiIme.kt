@@ -61,7 +61,7 @@ class KeyFarsiIme : InputMethodService() {
     private val DEFAULT_KEY_WIDTH = 34
     private val DEFAULT_KEY_HEIGHT = 48
     private val DEFAULT_KEY_GAP = 5
-    private val DEFAULT_PADDING = 2 // حاشیه امن پیش‌فرض
+    private val DEFAULT_PADDING = 2
 
     private fun t(key: String): String {
         return when (key) {
@@ -234,7 +234,6 @@ class KeyFarsiIme : InputMethodService() {
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // ✅ خواندن حاشیه امن از تنظیمات (بین ۱ تا ۵)
         val paddingPx = dp(prefs.getInt("keyboard_padding", DEFAULT_PADDING).coerceIn(1, 5))
 
         val actualWidth = if (isLandscape) {
@@ -262,7 +261,7 @@ class KeyFarsiIme : InputMethodService() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(actualWidth, ViewGroup.LayoutParams.MATCH_PARENT)
+            layoutParams = LinearLayout.LayoutParams(actualWidth, LinearLayout.LayoutParams.MATCH_PARENT)
         }
         root.addView(content)
 
@@ -389,7 +388,6 @@ class KeyFarsiIme : InputMethodService() {
         } catch (_: Exception) { "" }
     }
 
-    /** Most recent completed words, newest first; used as a two-token language context. */
     private fun getLastCompletedWords(): List<String> {
         return try {
             val before = currentInputConnection?.getTextBeforeCursor(180, 0)?.toString().orEmpty()
@@ -409,7 +407,6 @@ class KeyFarsiIme : InputMethodService() {
             val normalizedNext = PersianSpellChecker.normalize(currentWord)
             nextWords.put(normalizedNext, (nextWords.optInt(normalizedNext, 0) + 1).coerceAtMost(100))
             trigrams.put(contextKey, nextWords)
-            // Keep the personal model bounded so it cannot grow without limit.
             if (trigrams.length() > 1200) {
                 val keys = trigrams.keys()
                 val trimmed = JSONObject()
@@ -632,9 +629,7 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
-    // ✅ اصلاح نهایی: ارتفاع دکمه‌ها در حالت افقی کمتر می‌شود تا ردیف کنترل‌ها (دکمه حروف) دیده شود
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        // ✅ در حالت افقی ارتفاع دکمه‌ها را کمتر می‌کنیم
         val numKeyHeight = if (isLandscape) dp(32) else keyHeight()
 
         val rows = listOf(
@@ -664,7 +659,6 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(symLine)
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        // ✅ دکمه حروف در ابتدای ردیف
         controls.addView(actionButton(t("mode_letters"), keyBg, fg) { numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { symbolMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { emojiMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
@@ -685,7 +679,7 @@ class KeyFarsiIme : InputMethodService() {
         }
         scroller.addView(column)
         val symbolHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(260)
-        root.addView(scroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, symbolHeight))
+        root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, symbolHeight))
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         controls.addView(actionButton(t("mode_numbers"), keyBg, fg) { symbolMode = false; numberMode = true; refreshKeyboard() })
@@ -699,7 +693,7 @@ class KeyFarsiIme : InputMethodService() {
         emojiCategories.forEachIndexed { index, category ->
             categories.addView(actionButton(category.first, keyBg, fg) { emojiCategory = index; refreshKeyboard() })
         }
-        val categoryScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(categories) }
+                val categoryScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(categories) }
         root.addView(categoryScroll)
 
         val emojis = emojiCategories[emojiCategory].second
@@ -714,7 +708,7 @@ class KeyFarsiIme : InputMethodService() {
         }
         scroller.addView(column)
         val emojiHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(260)
-        root.addView(scroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, emojiHeight))
+        root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, emojiHeight))
 
         root.addView(actionButton(t("mode_back_to_letters"), Color.rgb(103, 80, 164), Color.WHITE) { emojiMode = false; refreshKeyboard() })
     }
@@ -746,7 +740,7 @@ class KeyFarsiIme : InputMethodService() {
         }
 
         scroller.addView(column)
-        root.addView(scroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(260)))
+        root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(260)))
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(actionButton(t("clipboard_save_current"), keyBg, fg) { saveClipboardCurrent(); refreshKeyboard() })
@@ -831,7 +825,7 @@ class KeyFarsiIme : InputMethodService() {
     private fun actionButton(text: String, bg: Int, fg: Int, click: () -> Unit): TextView {
         return keyButton(text, bg, fg, 14f, click).apply {
             minimumWidth = dp(40)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, keyHeight()).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, keyHeight()).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }
         }
     }
 
@@ -871,8 +865,6 @@ class KeyFarsiIme : InputMethodService() {
 
         var correctedCurrentWord = currentWord
         if (value == " " && currentWord.length >= 2 && !english && !isSensitiveInput()) {
-            // First honor a correction the user explicitly taught us; otherwise use
-            // conservative context-aware inference from the local Persian lexicon.
             val ranked = rankedSpellMatches(currentWord, priorWords)
             val beforeWord = currentInputConnection?.getTextBeforeCursor(240, 0)?.toString().orEmpty()
             val semanticPrefix = beforeWord.removeSuffix(currentWord).trim()
@@ -889,8 +881,6 @@ class KeyFarsiIme : InputMethodService() {
             }
         }
         if (value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")) {
-            // Store only the final token actually left in the editor, never the typo
-            // that was replaced. This keeps the contextual model from learning noise.
             if (lastWord.isNotBlank() && correctedCurrentWord.isNotBlank()) {
                 saveBigram(lastWord, correctedCurrentWord)
                 if (priorWords.size >= 2) saveTrigram(priorWords[1], priorWords[0], correctedCurrentWord)
@@ -933,11 +923,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    /**
-     * Reviews the complete text around the cursor before an IME_SEND action.
-     * Android does not expose another app's own on-screen Send button to an IME;
-     * this flow therefore applies when the user presses the keyboard's Send action.
-     */
     private fun reviewBeforeSend(action: Int) {
         val ic = currentInputConnection ?: return
         if (isSensitiveInput()) {
@@ -945,7 +930,6 @@ class KeyFarsiIme : InputMethodService() {
             return
         }
 
-        // Avoid replacing text while the editor has an active selection.
         if (!ic.getSelectedText(0).isNullOrEmpty()) {
             ic.performEditorAction(action)
             return
@@ -969,7 +953,6 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildSendReviewView(original, corrected))
     }
 
-    /** Conservative, offline sentence-wide spelling correction. Punctuation and spacing stay intact. */
     private fun correctWholePersianText(text: String): String {
         if (english || isSensitiveInput() || text.isBlank()) return text
         val tokenRegex = Regex("[\\p{L}\\p{M}\\u200c]+")
@@ -1005,8 +988,7 @@ class KeyFarsiIme : InputMethodService() {
             append(text, cursor, text.length)
         }
     }
-
-       private fun buildSendReviewView(original: String, corrected: String): View {
+        private fun buildSendReviewView(original: String, corrected: String): View {
         val dark = prefs.getBoolean("dark", false)
         val backgroundColor = if (dark) Color.rgb(29, 29, 35) else Color.rgb(232, 228, 239)
         val foreground = if (dark) Color.WHITE else Color.rgb(38, 34, 47)
@@ -1094,12 +1076,12 @@ class KeyFarsiIme : InputMethodService() {
         keyboardRoot = root
         return root
     }
+
     private fun applyCorrectionAndSend() {
         val pending = pendingSend ?: return
         val ic = currentInputConnection ?: run { pendingSend = null; refreshKeyboard(); return }
         val currentBefore = ic.getTextBeforeCursor(2000, 0)?.toString().orEmpty()
         val currentAfter = ic.getTextAfterCursor(2000, 0)?.toString().orEmpty()
-        // Do not overwrite anything if the host editor changed while the review was open.
         if (currentBefore.length != pending.beforeLength || currentAfter.length != pending.afterLength ||
             currentBefore + currentAfter != pending.original) {
             pendingSend = null
@@ -1127,7 +1109,6 @@ class KeyFarsiIme : InputMethodService() {
     private fun replaceCurrentWord(newWord: String) {
         val oldWord = getCurrentWord()
         if (oldWord.isNotEmpty()) {
-            // Choosing a suggestion is explicit feedback: remember this exact typo -> correction.
             if (!english && !isSensitiveInput()) {
                 val context = getLastCompletedWords()
                 val closeCandidates = PersianSpellChecker.rank(oldWord, spellCandidates(context)).take(6)
@@ -1165,7 +1146,6 @@ class KeyFarsiIme : InputMethodService() {
         return learnedCandidates + commonCandidates + dictionaryCandidates
     }
 
-    /** Returns a correction previously confirmed by the user's own suggestion tap. */
     private fun rememberedCorrection(typedWord: String): String? {
         if (isSensitiveInput() || english) return null
         val key = PersianSpellChecker.normalize(typedWord)
@@ -1189,7 +1169,6 @@ class KeyFarsiIme : InputMethodService() {
             val memory = loadCorrectionMemory()
             val old = memory.optJSONObject(key) ?: JSONObject()
             val oldWord = old.optString("word")
-            // If the same typo is deliberately corrected to a different word, replace its mapping.
             val count = if (PersianSpellChecker.normalize(oldWord) == value) old.optInt("count", 0) + 1 else 1
             memory.put(key, JSONObject().put("word", chosen).put("count", count.coerceAtMost(100)))
             prefs.edit().putString("correction_memory", memory.toString()).apply()
