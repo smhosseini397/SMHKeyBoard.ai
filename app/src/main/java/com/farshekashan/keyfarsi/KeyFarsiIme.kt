@@ -51,6 +51,36 @@ class KeyFarsiIme : InputMethodService() {
 
     private val prefs by lazy { getSharedPreferences("keyfarsi", MODE_PRIVATE) }
 
+    // ---------------------------------------------------------------
+    // Listener برای تغییر تنظیمات - قوی‌ترین مکانیزم رفرش
+    // ---------------------------------------------------------------
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key != null && isRelevantSettingKey(key) && isInputViewShown) {
+            handler.post {
+                val newHash = computeSettingsHash()
+                if (newHash != lastSettingsHash) {
+                    lastSettingsHash = newHash
+                    setInputView(buildKeyboard())
+                }
+            }
+        }
+    }
+
+    private fun isRelevantSettingKey(key: String): Boolean {
+        return key in listOf(
+            "dark", "theme", "keyboard_padding", "letter_side_margin",
+            "merge_key_kaf", "merge_key_gaf", "merge_key_re", "merge_key_zhe", "merge_ta_za",
+            "standard_big_keyboard", "fa_key_width", "fa_key_height", "fa_key_gap",
+            "en_key_width", "en_key_height", "en_key_gap",
+            "keyboard_width", "keyboard_height",
+            "keyboard_width_landscape", "keyboard_height_landscape",
+            "keyboard_vertical_offset", "backspace_separate_row",
+            "space_weight", "enter_weight", "custom_merges",
+            "backspace_weight", "backspace_separate_height", "backspace_inline_width",
+            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale"
+        ) || key.startsWith("custom_merge_") || key.startsWith("custom_delete_")
+    }
+
     private val persianDictionary: List<String> by lazy {
         try { assets.open("fa_words.txt").bufferedReader(Charsets.UTF_8).useLines { it.filter { w -> w.isNotBlank() }.toList() } }
         catch (_: Exception) { emptyList() }
@@ -116,18 +146,21 @@ class KeyFarsiIme : InputMethodService() {
     )
 
     private val alternateChars: Map<String, List<String>> = mapOf(
-        "ا" to listOf("آ", "أ", "إ", "ء", "ئ", "ؤ", "ۀ"),
-        "ی" to listOf("ي", "ى", "ئ"),
+        "ا" to listOf("آ", "أ","ء", "ئ"),
         "ک" to listOf("گ"),
-        "ه" to listOf("ة", "ۀ"),
-        "و" to listOf("ؤ"),
-        "ن" to listOf("ں"),
-        "ت" to listOf("ٹ"),
+        "ط" to listOf("ظ")
         "ر" to listOf("ژ"),
-        "د" to listOf("ڈ"),
-        "ز" to listOf("ذ"),
-        "س" to listOf("ص", "ث"),
-        "گ" to listOf("ګ"),
+        "a" to listOf("à", "á", "â", "ä", "å", "æ", "ā"),
+        "e" to listOf("è", "é", "ê", "ë", "ē"),
+        "i" to listOf("ì", "í", "î", "ï", "ī"),
+        "o" to listOf("ò", "ó", "ô", "ö", "ø", "ō"),
+        "u" to listOf("ù", "ú", "û", "ü", "ū"),
+        "c" to listOf("ç", "ć", "č"),
+        "n" to listOf("ñ", "ń", "ň"),
+        "s" to listOf("ś", "š", "ş"),
+        "m" to listOf("."),
+        "y" to listOf("ý", "ÿ")
+    )
         "a" to listOf("à", "á", "â", "ä", "å", "æ", "ā"),
         "e" to listOf("è", "é", "ê", "ë", "ē"),
         "i" to listOf("ì", "í", "î", "ï", "ī"),
@@ -169,18 +202,17 @@ class KeyFarsiIme : InputMethodService() {
         super.onCreate()
         clipboard.addPrimaryClipChangedListener(clipboardListener)
         lastSettingsHash = computeSettingsHash()
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
     }
 
     override fun onDestroy() {
         clipboard.removePrimaryClipChangedListener(clipboardListener)
+        try { prefs.unregisterOnSharedPreferenceChangeListener(prefsListener) } catch (_: Exception) {}
         stopRepeat()
         suggestionRunnable?.let { handler.removeCallbacks(it) }
         super.onDestroy()
     }
 
-    // ---------------------------------------------------------------
-    // تشخیص تغییر تنظیمات و رفرش خودکار کیبورد
-    // ---------------------------------------------------------------
     private fun computeSettingsHash(): Int {
         val relevantKeys = listOf(
             "dark", "theme", "keyboard_padding", "letter_side_margin",
@@ -190,7 +222,9 @@ class KeyFarsiIme : InputMethodService() {
             "keyboard_width", "keyboard_height",
             "keyboard_width_landscape", "keyboard_height_landscape",
             "keyboard_vertical_offset", "backspace_separate_row",
-            "space_weight", "enter_weight", "custom_merges"
+            "space_weight", "enter_weight", "custom_merges",
+            "backspace_weight", "backspace_separate_height", "backspace_inline_width",
+            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale"
         )
         var h = 17
         for (k in relevantKeys) {
@@ -222,6 +256,11 @@ class KeyFarsiIme : InputMethodService() {
     override fun onWindowShown() {
         super.onWindowShown()
         saveClipboardCurrent()
+        val newHash = computeSettingsHash()
+        if (newHash != lastSettingsHash && isInputViewShown) {
+            lastSettingsHash = newHash
+            setInputView(buildKeyboard())
+        }
     }
 
     override fun onCreateInputView(): View {
@@ -280,7 +319,6 @@ class KeyFarsiIme : InputMethodService() {
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
 
-        // اصلاح: padding صفر مجاز شد
         val paddingPx = dp(prefs.getInt("keyboard_padding", DEFAULT_PADDING).coerceIn(0, 5))
 
         val actualWidth = if (isLandscape) {
@@ -504,9 +542,6 @@ class KeyFarsiIme : InputMethodService() {
         return try { JSONObject(prefs.getString("bigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
     }
 
-    // ---------------------------------------------------------------
-    // اصلاح: پشتیبانی از JSON جدید custom_merges + سازگاری قدیمی
-    // ---------------------------------------------------------------
     private fun getCustomMerge(char: String): String? {
         val merges = loadCustomMerges()
         val obj = merges.optJSONObject(char)
@@ -528,7 +563,6 @@ class KeyFarsiIme : InputMethodService() {
         val standardBig = prefs.getBoolean("standard_big_keyboard", false)
         val rows = if (english) englishRows else persianRows
 
-        // اصلاح: حاشیه طرفین منفی هم مجاز شد + کلمپ عرض
         val letterSideMargin = prefs.getInt("letter_side_margin", 4).coerceIn(-40, 20)
         val usableWidthPx = (actualWidth - dp(letterSideMargin * 2))
             .coerceAtMost(actualWidth)
