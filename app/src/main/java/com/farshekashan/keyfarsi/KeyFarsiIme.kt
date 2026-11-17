@@ -1017,7 +1017,7 @@ class KeyFarsiIme : InputMethodService() {
         gravity = Gravity.CENTER
         setPadding(dp(12), dp(8), dp(12), dp(8) + getNavigationBarHeight())
         setBackgroundColor(backgroundColor)  // ← تغییر کرد
-        layoutParams = ViewGroup.LayoutParams(resources.displayMetrics.widthPixels, dp(280))
+        layoutParams = LinearLayout.LayoutParams(resources.displayMetrics.widthPixels, dp(280))
     }
     root.addView(TextView(this).apply {
         text = "بازبینی متن پیش از ارسال"
