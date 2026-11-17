@@ -112,17 +112,13 @@ class KeyFarsiIme : InputMethodService() {
     )
 
     private val alternateChars: Map<String, List<String>> = mapOf(
-        "ا" to listOf("آ", "أ", "إ", "ء", "ئ", "ؤ", "ۀ"),
+        "ا" to listOf("آ", "أ",  "ء", "ئ"),
         "ی" to listOf("ي", "ى", "ئ"),
-        "ک" to listOf("ك"),
+        "ک" to listOf("گ"),
         "ه" to listOf("ة", "ۀ"),
         "و" to listOf("ؤ"),
-        "ن" to listOf("ں"),
         "ت" to listOf("ٹ"),
-        "ر" to listOf("ڑ"),
-        "د" to listOf("ڈ"),
-        "ز" to listOf("ذ"),
-        "س" to listOf("ص", "ث"),
+        "ر" to listOf("ژ"),
         "گ" to listOf("ګ"),
         "a" to listOf("à", "á", "â", "ä", "å", "æ", "ā"),
         "e" to listOf("è", "é", "ê", "ë", "ē"),
@@ -811,7 +807,9 @@ class KeyFarsiIme : InputMethodService() {
                 false
             }
             setOnClickListener { click() }
-            val alternates = alternateChars[text.lowercase()] ?: alternateChars[text]
+            var alternates = alternateChars[text.lowercase()] ?: alternateChars[text]
+if (text == "ر" && prefs.getBoolean("merge_re_zhe", false)) alternates = listOf("ژ")
+if (text == "ک" && prefs.getBoolean("merge_kaf_gaf", false)) alternates = listOf("گ")
             if (!alternates.isNullOrEmpty()) setOnLongClickListener { v -> showAlternativesPopup(v, alternates); true }
         }
     }
