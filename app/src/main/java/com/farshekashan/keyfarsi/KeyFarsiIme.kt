@@ -53,7 +53,6 @@ class KeyFarsiIme : InputMethodService() {
     private var lastKeyTime = 0L
     private var lastSettingsHash = 0
 
-    // ✅ کش‌ها برای جلوگیری از پارس مکرر JSON و رفع lag
     private var cachedBigrams: JSONObject? = null
     private var cachedTrigrams: JSONObject? = null
     private var cachedLearnedWords: JSONObject? = null
@@ -314,20 +313,12 @@ class KeyFarsiIme : InputMethodService() {
         return buildKeyboard()
     }
 
-    // ✅ اصلاح ناحیه لمسی: کل کیبورد لمسی باشد، نه منهای نویگیشن‌بار
+    // ✅ ناحیه لمسی: TOUCHABLE_INSETS_FRAME خودکار کل فریم را لمسی می‌کند
     override fun onComputeInsets(outInsets: Insets) {
         super.onComputeInsets(outInsets)
         if (!isInputViewShown) return
-        val keyboardHeight = keyboardRoot?.height ?: 0
         outInsets.contentTopInsets = outInsets.visibleTopInsets
-        outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
-        val screenHeight = resources.displayMetrics.heightPixels
-        outInsets.touchableRegion.set(
-            0,
-            (screenHeight - keyboardHeight).coerceAtLeast(0),
-            resources.displayMetrics.widthPixels,
-            screenHeight
-        )
+        outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_FRAME
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -374,10 +365,19 @@ class KeyFarsiIme : InputMethodService() {
             if (requestedWidth > 0) dp(requestedWidth).coerceAtMost(screenWidth) - (paddingPx * 2) else screenWidth - (paddingPx * 2)
         }
 
+        // ✅ ارتفاع کمتر در landscape تا محتوا زیر کادر نرود
         val heightToUse = if (isLandscape) {
-            if (requestedHeightLandscape > 0) dp(requestedHeightLandscape).coerceAtMost(screenHeight) else (screenHeight * 0.55).toInt()
+            if (requestedHeightLandscape > 0) {
+                dp(requestedHeightLandscape).coerceAtMost((screenHeight * 0.50).toInt())
+            } else {
+                (screenHeight * 0.42).toInt()
+            }
         } else {
-            if (requestedHeight > 0) dp(requestedHeight).coerceAtMost((screenHeight * 0.55).toInt()) else (screenHeight * 0.42).toInt()
+            if (requestedHeight > 0) {
+                dp(requestedHeight).coerceAtMost((screenHeight * 0.50).toInt())
+            } else {
+                (screenHeight * 0.42).toInt()
+            }
         }
 
         val root = LinearLayout(this).apply {
@@ -750,16 +750,18 @@ class KeyFarsiIme : InputMethodService() {
         val screenHeight = resources.displayMetrics.heightPixels
         val currentRootHeight = keyboardRoot?.layoutParams?.height ?: (screenHeight * 0.42).toInt()
         val availableForKeyArea = currentRootHeight - dp(90)
+
+        // ✅ ارتفاع کلیدها با سقف کمتر در landscape تا سرریز نکند
         val dynamicKeyHeight = if (rawKeyHeight > 0) {
             dp(rawKeyHeight)
         } else {
             if (isLandscape) {
-                (availableForKeyArea / 5).coerceIn(dp(22), dp(45))
+                (availableForKeyArea / 5).coerceIn(dp(20), dp(36))
             } else {
                 if (prefs.getBoolean("standard_big_keyboard", false)) {
-                    (availableForKeyArea / 4).coerceIn(dp(28), dp(52))
+                    (availableForKeyArea / 4).coerceIn(dp(28), dp(48))
                 } else {
-                    (availableForKeyArea / 5).coerceIn(dp(28), dp(48))
+                    (availableForKeyArea / 5).coerceIn(dp(28), dp(44))
                 }
             }
         }
@@ -923,7 +925,7 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ نسخه مقاوم در برابر لمس‌های جا افتاده
+    // ✅ نسخه مقاوم در برابر لمس‌های جا افتاده — slop سیستم به‌جای درصد عرض
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -997,15 +999,18 @@ class KeyFarsiIme : InputMethodService() {
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        // اگر انگشت بیش از slop حرکت کرد، long-press لغو می‌شود
                         if (!longPressTriggered) {
                             val dx = abs(event.x - downX)
                             val dy = abs(event.y - downY)
-                            if (dx > touchSlop || dy > touchSlop) {
+                            // لغو long-press فقط با slop واقعی سیستم × 3
+                            if (dx > touchSlop * 3 || dy > touchSlop * 3) {
                                 longPressRunnable?.let { handler.removeCallbacks(it) }
                                 longPressRunnable = null
-                                // اگر خیلی دور شد، کلیک هم لغو شود
-                                if (dx > view.width * 0.6f || dy > view.height * 0.6f) movedOutside = true
+                            }
+                            // movedOutside فقط وقتی واقعاً از خود ویو بیرون رفته
+                            if (event.x < -touchSlop || event.x > view.width + touchSlop ||
+                                event.y < -touchSlop || event.y > view.height + touchSlop) {
+                                movedOutside = true
                             }
                         }
                         true
@@ -1142,11 +1147,12 @@ class KeyFarsiIme : InputMethodService() {
             root.addView(line)
         }
 
+        // ✅ ردیف آخر: صفر وزن ۲، backspace وزن ۱
         val lastRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val zeroDisplay = if (english) "0" else "۰"
         lastRow.addView(
             keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") },
-            LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
+            LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
         )
         val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
         bs.layoutParams = LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
@@ -1317,9 +1323,10 @@ class KeyFarsiIme : InputMethodService() {
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        val dx = abs(event.x - downX)
-                        val dy = abs(event.y - downY)
-                        if (dx > view.width * 0.6f || dy > view.height * 0.6f) movedOutside = true
+                        if (event.x < -touchSlop || event.x > view.width + touchSlop ||
+                            event.y < -touchSlop || event.y > view.height + touchSlop) {
+                            movedOutside = true
+                        }
                         true
                     }
                     MotionEvent.ACTION_UP -> {
@@ -1403,11 +1410,10 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun commit(value: String) {
+        val ic = currentInputConnection ?: return
         val now = System.currentTimeMillis()
         val timeSinceLastKey = if (lastKeyTime == 0L) Long.MAX_VALUE else now - lastKeyTime
         lastKeyTime = now
-
-        val ic = currentInputConnection ?: return
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
