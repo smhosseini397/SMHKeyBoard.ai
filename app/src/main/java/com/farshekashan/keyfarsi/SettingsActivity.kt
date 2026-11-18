@@ -27,7 +27,6 @@ class SettingsActivity : Activity() {
     }
     private val prefs by lazy { getSharedPreferences("keyfarsi", MODE_PRIVATE) }
 
-    // لیست ادغام‌های ثابت: (کلید فعال‌سازی، کلید حذف، برچسب)
     private data class MergeOption(
         val enableKey: String,
         val deleteKey: String,
@@ -452,18 +451,17 @@ class SettingsActivity : Activity() {
 
         outer.addView(sectionTitle("اندازه و چیدمان کیبورد"))
         addNumberField(outer, "عرض دکمه‌ها (dp) - ۰ برای خودکار", "fa_key_width", 0, 0, 200)
-        addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 48, 30, 120)
+        addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 40, 28, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
-        // حاشیه امن: حالا از ۰ قابل تنظیم است
         addNumberField(outer, "حاشیه امن (پیکسل)", "keyboard_padding", 2, 0, 5)
-        // حاشیه طرفین ردیف حروف: محدوده بزرگ‌تر تا کاملاً به دیواره بچسبد
+        // ✅ حاشیه طرفین با محدوده گسترده: منفی = چسبیده به دیواره، مثبت = فاصله از دیواره
         addNumberField(
             outer,
             "حاشیه طرفین ردیف حروف (dp)\nمنفی = چسبیده به دیواره، مثبت = فاصله از دیواره",
             "letter_side_margin",
             4,
-            -120,
-            40
+            -200,
+            100
         )
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
@@ -490,6 +488,15 @@ class SettingsActivity : Activity() {
         outer.addView(bsCheck)
         addNumberField(outer, "وزن بک‌اسپیس در ردیف مستقل (۱ تا ۵)", "backspace_weight", 2, 1, 5)
         addNumberField(outer, "ارتفاع بک‌اسپیس در ردیف مستقل (dp) - ۰ برای خودکار", "backspace_separate_height", 0, 0, 120)
+        // ✅ فاصله عمودی ردیف بک‌اسپیس با ردیف اسپیس
+        addNumberField(
+            outer,
+            "فاصله عمودی ردیف بک‌اسپیس با ردیف اسپیس (dp) - بیشتر = دورتر",
+            "backspace_separate_gap",
+            8,
+            0,
+            40
+        )
         addNumberField(outer, "عرض بک‌اسپیس در حالت عادی (۵ تا ۳۰)", "backspace_inline_width", 15, 5, 30)
 
         outer.addView(sectionTitle("جابه‌جایی عمودی کیبورد"))
@@ -513,7 +520,7 @@ class SettingsActivity : Activity() {
                     .putInt("keyboard_width_landscape", 0)
                     .putInt("keyboard_height_landscape", 0)
                     .putInt("fa_key_width", 0)
-                    .putInt("fa_key_height", 48)
+                    .putInt("fa_key_height", 40)
                     .putInt("fa_key_gap", 4)
                     .putInt("en_key_width", 0)
                     .putInt("en_key_height", 48)
@@ -545,6 +552,7 @@ class SettingsActivity : Activity() {
                     .putBoolean("backspace_separate_row", false)
                     .putInt("backspace_weight", 2)
                     .putInt("backspace_separate_height", 0)
+                    .putInt("backspace_separate_gap", 8)
                     .putInt("backspace_inline_width", 15)
                     .putInt("keyboard_vertical_offset", 0)
                     .putInt("space_weight", 3)
