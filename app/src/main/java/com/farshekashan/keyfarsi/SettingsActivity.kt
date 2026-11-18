@@ -226,7 +226,16 @@ class SettingsActivity : Activity() {
             setTextColor(0xFF8A8399.toInt())
             setPadding(0, dp(4), 0, dp(8))
         })
-        addNumberField(outer, "آستانه تایپ آرام (میلی‌ثانیه) - بیشتر = تصحیح کمتر", "slow_typing_threshold", 800, 200, 2000)
+
+        // ✅ آستانه تایپ آرام: پیش‌فرض جدید ۱۵۰۰ms و محدوده گسترده‌تر
+        addNumberField(
+            outer,
+            "آستانه تایپ آرام (میلی‌ثانیه) - بیشتر = تصحیح کمتر\nپیشنهاد: ۱۵۰۰ms برای تایپ عادی",
+            "slow_typing_threshold",
+            1500,
+            300,
+            5000
+        )
 
         outer.addView(sectionTitle("ادغام کلیدها (قابل تنظیم در هر دو حالت)"))
         outer.addView(TextView(this).apply {
@@ -454,7 +463,6 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 40, 28, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
         addNumberField(outer, "حاشیه امن (پیکسل)", "keyboard_padding", 2, 0, 5)
-        // ✅ حاشیه طرفین با محدوده گسترده: منفی = چسبیده به دیواره، مثبت = فاصله از دیواره
         addNumberField(
             outer,
             "حاشیه طرفین ردیف حروف (dp)\nمنفی = چسبیده به دیواره، مثبت = فاصله از دیواره",
@@ -476,6 +484,31 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "وزن دکمه فاصله (۱ تا ۸)", "space_weight", 3, 1, 8)
         addNumberField(outer, "وزن دکمه اینتر (۱۰ تا ۲۵ - تقسیم بر ۱۰)", "enter_weight", 15, 10, 25)
 
+        // ✅ دکمه‌های حروف: سرعت نگه‌داشتن و صفحه اعداد
+        outer.addView(sectionTitle("دکمه‌های حروف و اعداد"))
+        outer.addView(TextView(this).apply {
+            text = "سرعت پاسخ دکمه‌ها را تنظیم کن. مقدار کمتر = پاسخ سریع‌تر هنگام نگه‌داشتن دکمه."
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        addNumberField(
+            outer,
+            "تأخیر نگه‌داشتن دکمه حروف برای تغییر (میلی‌ثانیه)\nکمتر = سریع‌تر، بیشتر = فرصت بیشتر برای تایپ عادی",
+            "long_press_delay",
+            400,
+            150,
+            1200
+        )
+        addNumberField(
+            outer,
+            "ارتفاع دکمه‌های صفحه اعداد (dp) - عمودی\nپیش‌فرض: ۴۶",
+            "number_key_height",
+            46,
+            30,
+            80
+        )
+
         outer.addView(sectionTitle("بک‌اسپیس"))
         val bsCheck = CheckBox(this).apply {
             text = "انتقال بک‌اسپیس به ردیف مستقل پایین"
@@ -488,7 +521,6 @@ class SettingsActivity : Activity() {
         outer.addView(bsCheck)
         addNumberField(outer, "وزن بک‌اسپیس در ردیف مستقل (۱ تا ۵)", "backspace_weight", 2, 1, 5)
         addNumberField(outer, "ارتفاع بک‌اسپیس در ردیف مستقل (dp) - ۰ برای خودکار", "backspace_separate_height", 0, 0, 120)
-        // ✅ فاصله عمودی ردیف بک‌اسپیس با ردیف اسپیس
         addNumberField(
             outer,
             "فاصله عمودی ردیف بک‌اسپیس با ردیف اسپیس (dp) - بیشتر = دورتر",
@@ -557,11 +589,14 @@ class SettingsActivity : Activity() {
                     .putInt("keyboard_vertical_offset", 0)
                     .putInt("space_weight", 3)
                     .putInt("enter_weight", 15)
-                    .putInt("slow_typing_threshold", 800)
+                    // ✅ پیش‌فرض‌های جدید
+                    .putInt("slow_typing_threshold", 1500)
                     .putBoolean("auto_correct", true)
                     .putBoolean("dark", false)
                     .putString("theme", "default")
                     .putBoolean("standard_big_keyboard", false)
+                    .putInt("long_press_delay", 400)
+                    .putInt("number_key_height", 46)
                     .apply()
                 Toast.makeText(this@SettingsActivity, "تنظیمات بازنشانی شد", Toast.LENGTH_SHORT).show()
                 recreate()
