@@ -366,18 +366,29 @@ class KeyFarsiIme : InputMethodService() {
             if (requestedWidth > 0) dp(requestedWidth).coerceAtMost(screenWidth) - (paddingPx * 2) else screenWidth - (paddingPx * 2)
         }
 
-        val heightToUse = if (isLandscape) {
+        val baseHeight = if (isLandscape) {
             if (requestedHeightLandscape > 0) {
-                dp(requestedHeightLandscape).coerceAtMost((screenHeight * 0.50).toInt())
+                dp(requestedHeightLandscape).coerceAtMost((screenHeight * 0.55).toInt())
             } else {
-                (screenHeight * 0.42).toInt()
+                (screenHeight * 0.45).toInt()
             }
         } else {
             if (requestedHeight > 0) {
-                dp(requestedHeight).coerceAtMost((screenHeight * 0.50).toInt())
+                dp(requestedHeight).coerceAtMost((screenHeight * 0.55).toInt())
             } else {
                 (screenHeight * 0.42).toInt()
             }
+        }
+
+        val navBar = if (isLandscape) 0 else getNavigationBarHeight()
+        val verticalOffset = prefs.getInt("keyboard_vertical_offset", 0).coerceIn(-100, 200)
+        val offsetPx = dp(verticalOffset)
+        val adjustedBottomPadding = (navBar + paddingPx + offsetPx).coerceAtLeast(0)
+
+        val heightToUse = if (numberMode || symbolMode || emojiMode || clipboardMode) {
+            (baseHeight + adjustedBottomPadding + dp(20)).coerceAtMost((screenHeight * 0.62).toInt())
+        } else {
+            baseHeight
         }
 
         val root = LinearLayout(this).apply {
@@ -388,10 +399,6 @@ class KeyFarsiIme : InputMethodService() {
         }
         keyboardRoot = root
 
-        val verticalOffset = prefs.getInt("keyboard_vertical_offset", 0).coerceIn(-100, 200)
-        val offsetPx = dp(verticalOffset)
-        val navBar = if (isLandscape) 0 else getNavigationBarHeight()
-        val adjustedBottomPadding = (navBar + paddingPx + offsetPx).coerceAtLeast(0)
         root.setPadding(paddingPx, paddingPx, paddingPx, adjustedBottomPadding)
 
         val content = LinearLayout(this).apply {
@@ -974,6 +981,7 @@ class KeyFarsiIme : InputMethodService() {
             var downX = 0f
             var downY = 0f
             var movedOutside = false
+            var handled = false
             val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
             setOnTouchListener { view, event ->
@@ -981,6 +989,7 @@ class KeyFarsiIme : InputMethodService() {
                     MotionEvent.ACTION_DOWN -> {
                         longPressTriggered = false
                         movedOutside = false
+                        handled = false
                         downX = event.x
                         downY = event.y
                         view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
@@ -989,6 +998,7 @@ class KeyFarsiIme : InputMethodService() {
                         if (hasLongPress) {
                             longPressRunnable = Runnable {
                                 longPressTriggered = true
+                                handled = true
                                 view.animate().translationY(0f).setDuration(60).start()
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(3).toFloat()
                                 if (alternates!!.size == 1) commit(alternates[0])
@@ -1022,7 +1032,8 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!longPressTriggered && !movedOutside) {
+                        if (!longPressTriggered && !movedOutside && !handled) {
+                            handled = true
                             view.performClick()
                             click()
                         }
@@ -1035,10 +1046,7 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!longPressTriggered && !movedOutside) {
-                            view.performClick()
-                            click()
-                        }
+                        // ✅ در CANCEL هرگز commit نکن تا دوبار تایپ نشود
                         true
                     }
                     else -> false
@@ -1132,11 +1140,11 @@ class KeyFarsiIme : InputMethodService() {
         val baseNumHeightDp = when {
             rawNumHeight > 0 -> rawNumHeight
             fallbackFaHeight > 0 -> fallbackFaHeight
-            else -> if (isLandscape) 34 else 46
+            else -> if (isLandscape) 34 else 44
         }
         val numKeyHeight = dp(
-            if (isLandscape) baseNumHeightDp.coerceIn(22, 60)
-            else baseNumHeightDp.coerceIn(30, 80)
+            if (isLandscape) baseNumHeightDp.coerceIn(22, 56)
+            else baseNumHeightDp.coerceIn(30, 60)
         )
 
         val faGapRaw = prefs.getInt("fa_key_gap", 0)
@@ -1227,13 +1235,13 @@ class KeyFarsiIme : InputMethodService() {
             column.addView(line)
         }
         scroller.addView(column)
-        val symbolHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(260)
+        val symbolHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(240)
         root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, symbolHeight))
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        controls.addView(actionButton(t("mode_numbers"), keyBg, fg) { toggleMode { symbolMode = false; numberMode = true } })
-        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { toggleMode { symbolMode = false; emojiMode = true } })
-        controls.addView(actionButton(t("mode_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { symbolMode = false } })
+        controls.addView(actionButton(t("mode_numbers"), keyBg, fg) { toggleMode { numberMode = true } })
+        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { toggleMode { emojiMode = true } })
+        controls.addView(actionButton(t("mode_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { } })
         root.addView(controls)
     }
 
@@ -1256,10 +1264,10 @@ class KeyFarsiIme : InputMethodService() {
             column.addView(line)
         }
         scroller.addView(column)
-        val emojiHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(260)
+        val emojiHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(240)
         root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, emojiHeight))
 
-        root.addView(actionButton(t("mode_back_to_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { emojiMode = false } })
+        root.addView(actionButton(t("mode_back_to_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { } })
     }
 
     private fun buildClipboard(root: LinearLayout, keyBg: Int, fg: Int) {
@@ -1289,11 +1297,11 @@ class KeyFarsiIme : InputMethodService() {
         }
 
         scroller.addView(column)
-        root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(260)))
+        root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240)))
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(actionButton(t("clipboard_save_current"), keyBg, fg) { saveClipboardCurrent(); refreshKeyboard() })
-        actions.addView(actionButton(t("mode_back"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { clipboardMode = false } })
+        actions.addView(actionButton(t("mode_back"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { } })
         root.addView(actions)
     }
 
@@ -1348,12 +1356,14 @@ class KeyFarsiIme : InputMethodService() {
             var downX = 0f
             var downY = 0f
             var movedOutside = false
+            var handled = false
             val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         movedOutside = false
+                        handled = false
                         downX = event.x
                         downY = event.y
                         view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
@@ -1374,7 +1384,8 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!movedOutside) {
+                        if (!movedOutside && !handled) {
+                            handled = true
                             view.performClick()
                             click()
                         }
@@ -1385,10 +1396,7 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!movedOutside) {
-                            view.performClick()
-                            click()
-                        }
+                        // ✅ در CANCEL هرگز commit نکن
                         true
                     }
                     else -> false
