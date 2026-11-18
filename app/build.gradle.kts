@@ -40,7 +40,4 @@ dependencies {
     // ✅ برای ایموجی‌ها روی دستگاه‌های قدیمی (minSdk 23)
     implementation("androidx.emoji2:emoji2:1.5.0")
     implementation("androidx.emoji2:emoji2-views-helper:1.5.0")
-
-    // On-device inference for the pretrained Persian ALBERT masked-language model.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 }
