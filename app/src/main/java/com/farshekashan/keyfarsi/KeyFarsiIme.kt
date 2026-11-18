@@ -926,7 +926,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ نسخه مقاوم در برابر لمس‌های جا افتاده
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -1127,9 +1126,7 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
-    // ✅ کیبورد عددی: ارتفاع دکمه‌ها با number_key_height، اندازه/فاصله با fa_key_*
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        // ✅ ارتفاع دکمه‌های عدد از number_key_height، ولی در صورت خالی بودن از fa_key_height
         val rawNumHeight = prefs.getInt("number_key_height", 0)
         val fallbackFaHeight = prefs.getInt("fa_key_height", 0)
         val baseNumHeightDp = when {
@@ -1142,15 +1139,12 @@ class KeyFarsiIme : InputMethodService() {
             else baseNumHeightDp.coerceIn(30, 80)
         )
 
-        // ✅ فاصله بین دکمه‌های عدد با fa_key_gap
         val faGapRaw = prefs.getInt("fa_key_gap", 0)
         val numGap = dp(if (faGapRaw > 0) faGapRaw else DEFAULT_KEY_GAP)
 
-        // ✅ عرض دکمه‌های عددی: اگر fa_key_width تنظیم شده، grid را با آن می‌سازیم
         val faKeyWidthRaw = prefs.getInt("fa_key_width", 0)
         val numKeyWidthConfigured = if (faKeyWidthRaw > 0) dp(faKeyWidthRaw) else 0
 
-        // ردیف‌های عدد: ۴ ردیف ۳ ستونی برای ۱..۹، ۰ و backspace
         val rows = listOf(
             listOf("۱", "۲", "۳"),
             listOf("۴", "۵", "۶"),
@@ -1175,7 +1169,6 @@ class KeyFarsiIme : InputMethodService() {
             root.addView(line)
         }
 
-        // ✅ ردیف آخر: صفر وزن ۲، backspace وزن ۱
         val lastRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val zeroDisplay = if (english) "0" else "۰"
         val zeroView = keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") }
@@ -1215,9 +1208,9 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(symLine)
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        controls.addView(actionButton(t("mode_letters"), keyBg, fg) { numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
-        controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { symbolMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
-        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { emojiMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("mode_letters"), keyBg, fg) { toggleMode { numberMode = false } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { toggleMode { symbolMode = true } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { toggleMode { emojiMode = true } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         controls.addView(keyButton(" ", keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         controls.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         root.addView(controls)
@@ -1238,9 +1231,9 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, symbolHeight))
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        controls.addView(actionButton(t("mode_numbers"), keyBg, fg) { symbolMode = false; numberMode = true; refreshKeyboard() })
-        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { symbolMode = false; emojiMode = true; refreshKeyboard() })
-        controls.addView(actionButton(t("mode_letters"), Color.rgb(103, 80, 164), Color.WHITE) { symbolMode = false; refreshKeyboard() })
+        controls.addView(actionButton(t("mode_numbers"), keyBg, fg) { toggleMode { symbolMode = false; numberMode = true } })
+        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { toggleMode { symbolMode = false; emojiMode = true } })
+        controls.addView(actionButton(t("mode_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { symbolMode = false } })
         root.addView(controls)
     }
 
@@ -1266,7 +1259,7 @@ class KeyFarsiIme : InputMethodService() {
         val emojiHeight = if (isLandscape) (resources.displayMetrics.heightPixels * 0.5).toInt() else dp(260)
         root.addView(scroller, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, emojiHeight))
 
-        root.addView(actionButton(t("mode_back_to_letters"), Color.rgb(103, 80, 164), Color.WHITE) { emojiMode = false; refreshKeyboard() })
+        root.addView(actionButton(t("mode_back_to_letters"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { emojiMode = false } })
     }
 
     private fun buildClipboard(root: LinearLayout, keyBg: Int, fg: Int) {
@@ -1300,7 +1293,7 @@ class KeyFarsiIme : InputMethodService() {
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(actionButton(t("clipboard_save_current"), keyBg, fg) { saveClipboardCurrent(); refreshKeyboard() })
-        actions.addView(actionButton(t("mode_back"), Color.rgb(103, 80, 164), Color.WHITE) { clipboardMode = false; refreshKeyboard() })
+        actions.addView(actionButton(t("mode_back"), Color.rgb(103, 80, 164), Color.WHITE) { toggleMode { clipboardMode = false } })
         root.addView(actions)
     }
 
@@ -1336,7 +1329,6 @@ class KeyFarsiIme : InputMethodService() {
         gravity = Gravity.CENTER_VERTICAL
     }
 
-    // ✅ دکمه عمومی — بدون لغو ناخواسته کلیک
     private fun keyButton(text: String, bg: Int, fg: Int, size: Float = 18f, click: () -> Unit): TextView {
         return TextView(this).apply {
             this.text = text
@@ -1462,7 +1454,6 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildKeyboard())
     }
 
-    // ✅ commit سبک: در هر حرف فقط یک commitText
     private fun commit(value: String) {
         val ic = currentInputConnection ?: return
         val now = System.currentTimeMillis()
