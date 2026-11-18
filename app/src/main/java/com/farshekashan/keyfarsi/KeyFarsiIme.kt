@@ -897,11 +897,18 @@ class KeyFarsiIme : InputMethodService() {
                     line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
                 if (!backspaceSeparate) {
+                    // ✅ spacer کشسان تا backspace به لبه راست چسبیده شود
+                    val spacer = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+                    }
+                    line.addView(spacer)
                     val bs = backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, bsInlineWidth, keyHeight, 0)
                     bs.layoutParams = LinearLayout.LayoutParams(bsInlineWidth, keyHeight).apply {
-                        setMargins(gapPx, dp(2), 0, dp(2))
+                        setMargins(gapPx, dp(2), gapPx, dp(2))
                     }
                     line.addView(bs)
+                } else {
+                    repeat(emptyRight) { line.addView(emptyFixedKeySized(keyWidthPx, keyHeight, gapPx)) }
                 }
             } else {
                 repeat(emptyLeft) { line.addView(emptyFixedKeySized(keyWidthPx, keyHeight, gapPx)) }
@@ -980,16 +987,14 @@ class KeyFarsiIme : InputMethodService() {
             var longPressRunnable: Runnable? = null
             var downX = 0f
             var downY = 0f
-            var movedOutside = false
-            var handled = false
+            var executed = false
             val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         longPressTriggered = false
-                        movedOutside = false
-                        handled = false
+                        executed = false
                         downX = event.x
                         downY = event.y
                         view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
@@ -998,7 +1003,7 @@ class KeyFarsiIme : InputMethodService() {
                         if (hasLongPress) {
                             longPressRunnable = Runnable {
                                 longPressTriggered = true
-                                handled = true
+                                executed = true
                                 view.animate().translationY(0f).setDuration(60).start()
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(3).toFloat()
                                 if (alternates!!.size == 1) commit(alternates[0])
@@ -1012,15 +1017,9 @@ class KeyFarsiIme : InputMethodService() {
                         if (!longPressTriggered) {
                             val dx = abs(event.x - downX)
                             val dy = abs(event.y - downY)
-                            if (dx > touchSlop * 3 || dy > touchSlop * 3) {
+                            if (dx > touchSlop || dy > touchSlop) {
                                 longPressRunnable?.let { handler.removeCallbacks(it) }
                                 longPressRunnable = null
-                            }
-                            if (view.width > 0 && view.height > 0) {
-                                if (event.x < -touchSlop || event.x > view.width + touchSlop ||
-                                    event.y < -touchSlop || event.y > view.height + touchSlop) {
-                                    movedOutside = true
-                                }
                             }
                         }
                         true
@@ -1032,8 +1031,8 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!longPressTriggered && !movedOutside && !handled) {
-                            handled = true
+                        if (!longPressTriggered && !executed) {
+                            executed = true
                             view.performClick()
                             click()
                         }
@@ -1046,7 +1045,12 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        // ✅ در CANCEL هرگز commit نکن تا دوبار تایپ نشود
+                        // ✅ اگر حرکت قابل توجه نبود و long-press رخ نداده، commit کن
+                        if (!longPressTriggered && !executed) {
+                            executed = true
+                            view.performClick()
+                            click()
+                        }
                         true
                     }
                     else -> false
@@ -1194,11 +1198,11 @@ class KeyFarsiIme : InputMethodService() {
         val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
         val bsLp = if (numKeyWidthConfigured > 0) {
             LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight).apply {
-                setMargins(numGap, dp(2), 0, dp(2))
+                setMargins(numGap, dp(2), numGap, dp(2))
             }
         } else {
             LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
-                setMargins(numGap, dp(2), 0, dp(2))
+                setMargins(numGap, dp(2), numGap, dp(2))
             }
         }
         bs.layoutParams = bsLp
@@ -1355,15 +1359,13 @@ class KeyFarsiIme : InputMethodService() {
 
             var downX = 0f
             var downY = 0f
-            var movedOutside = false
-            var handled = false
+            var executed = false
             val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        movedOutside = false
-                        handled = false
+                        executed = false
                         downX = event.x
                         downY = event.y
                         view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
@@ -1371,12 +1373,7 @@ class KeyFarsiIme : InputMethodService() {
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (view.width > 0 && view.height > 0) {
-                            if (event.x < -touchSlop || event.x > view.width + touchSlop ||
-                                event.y < -touchSlop || event.y > view.height + touchSlop) {
-                                movedOutside = true
-                            }
-                        }
+                        // فقط برای سازگاری، اجرا در UP/CANCEL انجام می‌شود
                         true
                     }
                     MotionEvent.ACTION_UP -> {
@@ -1384,8 +1381,8 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        if (!movedOutside && !handled) {
-                            handled = true
+                        if (!executed) {
+                            executed = true
                             view.performClick()
                             click()
                         }
@@ -1396,7 +1393,12 @@ class KeyFarsiIme : InputMethodService() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
                         }
-                        // ✅ در CANCEL هرگز commit نکن
+                        // ✅ اگر حرکت قابل توجه نبود، commit کن
+                        if (!executed) {
+                            executed = true
+                            view.performClick()
+                            click()
+                        }
                         true
                     }
                     else -> false
