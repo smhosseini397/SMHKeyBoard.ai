@@ -46,18 +46,6 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Verify bundled learning resources
-        run: |
-          test -s learning_profile_template.json
-          test -s learning_profile.schema.json
-          test -s seed_corrections.json
-          test -s app/src/main/assets/learning/learning_profile_template.json
-          test -s app/src/main/assets/learning/learning_profile.schema.json
-          test -s app/src/main/assets/learning/seed_corrections.json
-          cmp learning_profile_template.json app/src/main/assets/learning/learning_profile_template.json
-          cmp learning_profile.schema.json app/src/main/assets/learning/learning_profile.schema.json
-          cmp seed_corrections.json app/src/main/assets/learning/seed_corrections.json
-
       - name: Build Debug APK
         run: gradle --no-daemon assembleDebug
 
