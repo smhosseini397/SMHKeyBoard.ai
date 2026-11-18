@@ -16,8 +16,8 @@ import android.os.Looper
 import android.text.InputType
 import android.text.SpannableString
 import android.text.Spanned
-import android.text.style.RelativeSizeSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -153,7 +153,6 @@ class KeyFarsiIme : InputMethodService() {
         "zxcvbnm"
     )
 
-    // نقشه ادغام‌ها: کلید اصلی -> (کلید فعال‌سازی، کلید حذف، حرف دوم)
     private data class MergeSpec(
         val firstChar: Char,
         val secondChar: Char,
@@ -172,7 +171,6 @@ class KeyFarsiIme : InputMethodService() {
         MergeSpec('چ', 'ج', "merge_che_je",    "merge_che_je_delete")
     )
 
-    // نقشه سریع: کلید اصلی -> حرف دوم (فقط ادغام‌های فعال)
     private fun activeMerges(): Map<Char, Char> {
         val map = mutableMapOf<Char, Char>()
         for (spec in mergeSpecs) {
@@ -183,7 +181,6 @@ class KeyFarsiIme : InputMethodService() {
         return map
     }
 
-    // کلیدهایی که باید از صفحه حذف شوند (حرف دوم ادغام‌های فعال + حذف کلید اصلی توسط user)
     private fun removedKeys(): Set<Char> {
         val removed = mutableSetOf<Char>()
         for (spec in mergeSpecs) {
@@ -194,15 +191,9 @@ class KeyFarsiIme : InputMethodService() {
         return removed
     }
 
-    // نقشه حرف دوم برای نمایش کم‌رنگ
-    private fun mergeLabelFor(char: Char): Char? {
-        return activeMerges()[char]
-    }
+    private fun mergeLabelFor(char: Char): Char? = activeMerges()[char]
 
-    // حرف دوم برای تایپ با نگه‌داشتن
-    private fun mergeAlternateFor(char: Char): Char? {
-        return activeMerges()[char]
-    }
+    private fun mergeAlternateFor(char: Char): Char? = activeMerges()[char]
 
     private val alternateChars: Map<String, List<String>> = mapOf(
         "ا" to listOf("آ", "أ", "ء", "ئ"),
@@ -259,8 +250,9 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun computeSettingsHash(): Int {
-        val relevantKeys = listOf(
-            "dark", "theme", "keyboard_padding", "letter_side_margin",
+        val stringKeys = listOf("theme")
+        val booleanKeys = listOf(
+            "dark", "standard_big_keyboard",
             "merge_key_kaf", "merge_key_kaf_delete",
             "merge_key_re", "merge_key_re_delete",
             "merge_ta_za", "merge_ta_za_delete",
@@ -269,20 +261,28 @@ class KeyFarsiIme : InputMethodService() {
             "merge_seen_the", "merge_seen_the_delete",
             "merge_ain_ghain", "merge_ain_ghain_delete",
             "merge_che_je", "merge_che_je_delete",
-            "standard_big_keyboard", "fa_key_width", "fa_key_height", "fa_key_gap",
+            "backspace_separate_row"
+        )
+        val intKeys = listOf(
+            "keyboard_padding", "letter_side_margin",
+            "fa_key_width", "fa_key_height", "fa_key_gap",
             "en_key_width", "en_key_height", "en_key_gap",
             "keyboard_width", "keyboard_height",
             "keyboard_width_landscape", "keyboard_height_landscape",
-            "keyboard_vertical_offset", "backspace_separate_row",
+            "keyboard_vertical_offset",
             "space_weight", "enter_weight",
             "backspace_weight", "backspace_separate_height", "backspace_inline_width",
             "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale"
         )
         var h = 17
-        for (k in relevantKeys) {
+        for (k in stringKeys) {
             h = 31 * h + (prefs.getString(k, null)?.hashCode() ?: 0)
-            h = 31 * h + prefs.getInt(k, 0)
+        }
+        for (k in booleanKeys) {
             h = 31 * h + if (prefs.getBoolean(k, false)) 1 else 0
+        }
+        for (k in intKeys) {
+            h = 31 * h + prefs.getInt(k, 0)
         }
         return h
     }
@@ -444,7 +444,7 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     // =====================================================================
-    // بخش پیشنهادها (با long-press برای حذف از حافظه)
+    // پیشنهادها با long-press برای حذف از حافظه
     // =====================================================================
     private fun buildSuggestions(root: LinearLayout, keyBg: Int, fg: Int) {
         val row = LinearLayout(this).apply {
@@ -534,7 +534,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ دیالوگ حذف کلمه یادگرفته با نگه‌داشتن انگشت
     private fun showDeleteLearnedWordDialog(word: String) {
         android.app.AlertDialog.Builder(this)
             .setTitle("حذف کلمه یادگرفته")
@@ -672,7 +671,6 @@ class KeyFarsiIme : InputMethodService() {
         val standardBig = prefs.getBoolean("standard_big_keyboard", false)
         val rows = if (english) englishRows else persianRows
 
-        // ✅ محدوده جدید -120..40 (هماهنگ با Settings)
         val letterSideMargin = prefs.getInt("letter_side_margin", 4).coerceIn(-120, 40)
         val usableWidthPx = (actualWidth - dp(letterSideMargin * 2))
             .coerceAtMost(actualWidth)
@@ -689,7 +687,6 @@ class KeyFarsiIme : InputMethodService() {
 
         val backspaceSeparate = prefs.getBoolean("backspace_separate_row", false)
 
-        // حروفی که به دلیل ادغام یا تنظیمات باید حذف شوند
         val removed = if (!english) removedKeys() else emptySet()
 
         if (standardBig) {
@@ -808,7 +805,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ دکمه حرف با نمایش کم‌رنگ حرف دوم (اگر ادغام فعال است)
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -817,23 +813,15 @@ class KeyFarsiIme : InputMethodService() {
                 mergeSecondary != null
 
         val base = TextView(this).apply {
-            // ✅ اگر ادغام فعال است، حرف دوم را کم‌رنگ پایین حرف اول نمایش بده
-            if (mergeSecondary != null) {
-                val display = text
+            if (mergeSecondary != null && text.isNotEmpty()) {
                 val secondaryText = mergeSecondary.toString()
-                val fullText = "$display\n$secondaryText"
+                val fullText = "$text\n$secondaryText"
                 val spannable = SpannableString(fullText)
-                val startIdx = display.length + 1
-                spannable.setSpan(
-                    RelativeSizeSpan(0.6f),
-                    startIdx, fullText.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                spannable.setSpan(
-                    ForegroundColorSpan(if (prefs.getBoolean("dark", false)) Color.rgb(160, 160, 160) else Color.rgb(140, 140, 140)),
-                    startIdx, fullText.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
+                val startIdx = text.length + 1
+                if (startIdx < fullText.length) {
+                    spannable.setSpan(RelativeSizeSpan(0.6f), startIdx, fullText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    spannable.setSpan(ForegroundColorSpan(if (prefs.getBoolean("dark", false)) Color.rgb(160, 160, 160) else Color.rgb(140, 140, 140)), startIdx, fullText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
                 this.text = spannable
             } else {
                 this.text = text
@@ -856,7 +844,6 @@ class KeyFarsiIme : InputMethodService() {
             setOnClickListener { click() }
             layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
 
-            // نگه‌داشتن: اگر ادغام فعال است، حرف دوم؛ وگرنه alternateChars
             val alternates = when {
                 mergeSecondary != null -> listOf(mergeSecondary.toString())
                 else -> alternateChars[text.lowercase()] ?: alternateChars[text]
@@ -1194,19 +1181,12 @@ class KeyFarsiIme : InputMethodService() {
         val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 800).toLong()
         val isSlowTyping = timeSinceLastKey > slowTypingThreshold
 
-        // ✅ ذخیره خودکار کلمه‌ای که کاربر تایپ کرده (قبل از هر اصلاحی)
-        // فقط اگر کلمه معتبر فارسی و درست باشد (یعنی اسپل‌چکر آن را می‌شناسد)
         if (currentWord.length >= 2 && !english && !isSensitiveInput() && value == " ") {
-            val rankedForCheck = PersianSpellChecker.rank(currentWord, spellCandidates(priorWords))
-            val isExactMatch = rankedForCheck.any {
-                PersianSpellChecker.normalize(it.word) == PersianSpellChecker.normalize(currentWord) && it.distance == 0
-            }
-            if (isExactMatch) {
+            if (isKnownCorrectWord(currentWord)) {
                 learnWord(currentWord)
             }
         }
 
-        // اصلاح خودکار (اگر فعال باشد)
         if (autoCorrect && value == " " && currentWord.length >= 2 && !english && !isSensitiveInput() && !isSlowTyping) {
             val ranked = PersianSpellChecker.rank(currentWord, spellCandidates(priorWords))
             val correction = rememberedCorrection(currentWord)
@@ -1222,7 +1202,6 @@ class KeyFarsiIme : InputMethodService() {
             saveBigram(lastWord, correctedCurrentWord)
             if (priorWords.size >= 2) saveTrigram(priorWords[1], priorWords[0], correctedCurrentWord)
         }
-        // ✅ یادگیری کلمه اصلاح‌شده یا اصلی
         learnWord(correctedCurrentWord)
 
         ic.commitText(value, 1)
@@ -1528,6 +1507,22 @@ class KeyFarsiIme : InputMethodService() {
 
     private fun loadLearnedWords(): JSONObject {
         return try { JSONObject(prefs.getString("learned_words", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+    }
+
+    private val normalizedDictionary: Set<String> by lazy {
+        (commonWords + persianDictionary).map { PersianSpellChecker.normalize(it) }.toSet()
+    }
+
+    private fun isKnownCorrectWord(word: String): Boolean {
+        val normalized = PersianSpellChecker.normalize(word)
+        if (normalized.isBlank()) return false
+        val learned = loadLearnedWords()
+        if (learned.has(word)) return true
+        val learnedKeys = learned.keys()
+        while (learnedKeys.hasNext()) {
+            if (PersianSpellChecker.normalize(learnedKeys.next()) == normalized) return true
+        }
+        return normalized in normalizedDictionary
     }
 
     private fun isSensitiveInput(): Boolean {
