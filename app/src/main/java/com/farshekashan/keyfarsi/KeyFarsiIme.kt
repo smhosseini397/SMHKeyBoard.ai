@@ -51,6 +51,14 @@ class KeyFarsiIme : InputMethodService() {
     private var lastKeyTime = 0L
     private var lastSettingsHash = 0
 
+    // ✅ کش‌ها برای جلوگیری از پارس مکرر JSON و رفع lag
+    private var cachedBigrams: JSONObject? = null
+    private var cachedTrigrams: JSONObject? = null
+    private var cachedLearnedWords: JSONObject? = null
+    private var cachedCorrectionMemory: JSONObject? = null
+    private var lastSuggestedWord = ""
+    private var lastSuggestedContext = ""
+
     private val prefs by lazy { getSharedPreferences("keyfarsi", MODE_PRIVATE) }
 
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -84,7 +92,10 @@ class KeyFarsiIme : InputMethodService() {
             "backspace_separate_gap",
             "space_weight", "enter_weight",
             "backspace_weight", "backspace_separate_height", "backspace_inline_width",
-            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale"
+            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale",
+            // ✅ کلیدهای جدید
+            "long_press_delay", "slow_typing_threshold", "number_key_height",
+            "auto_correct"
         )
     }
 
@@ -257,7 +268,7 @@ class KeyFarsiIme : InputMethodService() {
             "merge_seen_the", "merge_seen_the_delete",
             "merge_ain_ghain", "merge_ain_ghain_delete",
             "merge_che_je", "merge_che_je_delete",
-            "backspace_separate_row"
+            "backspace_separate_row", "auto_correct"
         )
         val intKeys = listOf(
             "keyboard_padding", "letter_side_margin",
@@ -269,7 +280,8 @@ class KeyFarsiIme : InputMethodService() {
             "space_weight", "enter_weight",
             "backspace_weight", "backspace_separate_height", "backspace_inline_width",
             "backspace_separate_gap",
-            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale"
+            "standard_key_width", "standard_key_height", "standard_key_gap", "standard_scale",
+            "long_press_delay", "slow_typing_threshold", "number_key_height"
         )
         var h = 17
         for (k in stringKeys) h = 31 * h + (prefs.getString(k, null)?.hashCode() ?: 0)
@@ -354,14 +366,12 @@ class KeyFarsiIme : InputMethodService() {
 
         val paddingPx = dp(prefs.getInt("keyboard_padding", DEFAULT_PADDING).coerceIn(0, 5))
 
-        // ✅ عرض: همیشه محدود به صفحه
         val actualWidth = if (isLandscape) {
             if (requestedWidthLandscape > 0) dp(requestedWidthLandscape).coerceAtMost(screenWidth) - (paddingPx * 2) else screenWidth - (paddingPx * 2)
         } else {
             if (requestedWidth > 0) dp(requestedWidth).coerceAtMost(screenWidth) - (paddingPx * 2) else screenWidth - (paddingPx * 2)
         }
 
-        // ✅ ارتفاع افقی: قابل تنظیم تا سقف صفحه
         val heightToUse = if (isLandscape) {
             if (requestedHeightLandscape > 0) dp(requestedHeightLandscape).coerceAtMost(screenHeight) else (screenHeight * 0.55).toInt()
         } else {
@@ -437,7 +447,7 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     // =====================================================================
-    // پیشنهادها — با long-press برای حذف
+    // پیشنهادها
     // =====================================================================
     private fun buildSuggestions(root: LinearLayout, keyBg: Int, fg: Int) {
         val row = LinearLayout(this).apply {
@@ -451,9 +461,16 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun refreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
+        // ✅ جلوگیری از refresh تکراری برای کاهش lag
+        val current = getCurrentWord()
+        val lastWord = getLastCompletedWord()
+        val ctx = "$current|$lastWord"
+        if (ctx == lastSuggestedContext) return
+        lastSuggestedContext = ctx
+
         suggestionRunnable?.let { handler.removeCallbacks(it) }
         suggestionRunnable = Runnable { doRefreshSuggestions(keyBg, fg) }
-        handler.postDelayed(suggestionRunnable!!, 150L)
+        handler.postDelayed(suggestionRunnable!!, 120L)
     }
 
     private fun doRefreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
@@ -553,6 +570,7 @@ class KeyFarsiIme : InputMethodService() {
                     removeBigramsContaining(word)
                     removeTrigramsContaining(word)
                     Toast.makeText(this@KeyFarsiIme, "کلمه «$word» حذف شد", Toast.LENGTH_SHORT).show()
+                    lastSuggestedContext = ""
                     refreshSuggestions()
                 }
                 .setNegativeButton("انصراف", null)
@@ -570,6 +588,7 @@ class KeyFarsiIme : InputMethodService() {
             removeBigramsContaining(word)
             removeTrigramsContaining(word)
             Toast.makeText(this@KeyFarsiIme, "کلمه «$word» حذف شد", Toast.LENGTH_SHORT).show()
+            lastSuggestedContext = ""
             refreshSuggestions()
         }
     }
@@ -586,6 +605,7 @@ class KeyFarsiIme : InputMethodService() {
             }
             keysToRemove.forEach { words.remove(it) }
             prefs.edit().putString("learned_words", words.toString()).apply()
+            cachedLearnedWords = words
         } catch (e: Exception) {
             android.util.Log.e("KeyFarsi", "remove learned word error", e)
         }
@@ -609,6 +629,7 @@ class KeyFarsiIme : InputMethodService() {
             }
             keysToRemove.forEach { bigrams.remove(it) }
             prefs.edit().putString("bigrams", bigrams.toString()).apply()
+            cachedBigrams = bigrams
         } catch (_: Exception) {}
     }
 
@@ -626,6 +647,7 @@ class KeyFarsiIme : InputMethodService() {
             }
             keysToRemove.forEach { trigrams.remove(it) }
             prefs.edit().putString("trigrams", trigrams.toString()).apply()
+            cachedTrigrams = trigrams
         } catch (_: Exception) {}
     }
 
@@ -662,12 +684,19 @@ class KeyFarsiIme : InputMethodService() {
                 var kept = 0
                 while (keys.hasNext() && kept < 1000) { val key = keys.next(); trimmed.put(key, trigrams.optJSONObject(key)); kept++ }
                 prefs.edit().putString("trigrams", trimmed.toString()).apply()
-            } else prefs.edit().putString("trigrams", trigrams.toString()).apply()
+                cachedTrigrams = trimmed
+            } else {
+                prefs.edit().putString("trigrams", trigrams.toString()).apply()
+                cachedTrigrams = trigrams
+            }
         } catch (e: Exception) { android.util.Log.e("KeyFarsi", "trigram save error", e) }
     }
 
     private fun loadTrigrams(): JSONObject {
-        return try { JSONObject(prefs.getString("trigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        if (cachedTrigrams == null) {
+            cachedTrigrams = try { JSONObject(prefs.getString("trigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        }
+        return cachedTrigrams!!
     }
 
     private fun saveBigram(prevWord: String, currentWord: String) {
@@ -680,26 +709,29 @@ class KeyFarsiIme : InputMethodService() {
             nextWords.put(currentWord, (count + 1).coerceAtMost(100))
             bigrams.put(prevWord, nextWords)
             prefs.edit().putString("bigrams", bigrams.toString()).apply()
+            cachedBigrams = bigrams
         } catch (e: Exception) {
             android.util.Log.e("KeyFarsi", "bigram save error", e)
         }
     }
 
     private fun loadBigrams(): JSONObject {
-        return try { JSONObject(prefs.getString("bigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        if (cachedBigrams == null) {
+            cachedBigrams = try { JSONObject(prefs.getString("bigrams", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        }
+        return cachedBigrams!!
     }
 
     // =====================================================================
     // کیبورد حروف
     // =====================================================================
     private fun buildLetterKeyboard(root: LinearLayout, keyBg: Int, fg: Int, accent: Int, actualWidth: Int) {
-        // ✅ حاشیه طرفین: محدود به عرض واقعی
         val letterSideMargin = prefs.getInt("letter_side_margin", 4).coerceIn(-120, 40)
         val usableWidthPx = if (letterSideMargin >= 0) {
             (actualWidth - dp(letterSideMargin * 2)).coerceAtLeast(dp(100))
         } else {
             val expanded = actualWidth + dp(-letterSideMargin * 2)
-            expanded.coerceAtMost(actualWidth)  // ✅ هرگز بیشتر از actualWidth
+            expanded.coerceAtMost(actualWidth)
         }
 
         val prefix = if (english) "en_" else "fa_"
@@ -713,7 +745,6 @@ class KeyFarsiIme : InputMethodService() {
         val backspaceSeparate = prefs.getBoolean("backspace_separate_row", false)
         val removed = if (!english) removedKeys() else emptySet()
 
-        // ✅ ارتفاع پویا
         val screenHeight = resources.displayMetrics.heightPixels
         val currentRootHeight = keyboardRoot?.layoutParams?.height ?: (screenHeight * 0.42).toInt()
         val availableForKeyArea = currentRootHeight - dp(90)
@@ -731,7 +762,6 @@ class KeyFarsiIme : InputMethodService() {
             }
         }
 
-        // ✅ همیشه از چیدمان استاندارد Gboard استفاده کن
         val standardBig = prefs.getBoolean("standard_big_keyboard", false)
         if (standardBig) {
             buildStandardGboardLayout(root, keyBg, fg, accent, usableWidthPx, dynamicKeyHeight, backspaceSeparate)
@@ -740,7 +770,7 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ چیدمان استاندارد Gboard: ردیف‌ها با عرض یکسان، فاصله بین دکمه‌ها مساوی
+    // ✅ چیدمان استاندارد Gboard با بک‌اسپیس چسبیده به راست
     private fun buildStandardGboardLayout(
         root: LinearLayout, keyBg: Int, fg: Int, accent: Int,
         usableWidth: Int, keyHeight: Int, backspaceSeparate: Boolean
@@ -749,39 +779,52 @@ class KeyFarsiIme : InputMethodService() {
         val removed = if (!english) removedKeys() else emptySet()
         val gapPx = dp(prefs.getInt(if (english) "en_key_gap" else "fa_key_gap", DEFAULT_KEY_GAP).let { if (it > 0) it else DEFAULT_KEY_GAP })
         val availableForKeyArea = usableWidth - (10 * gapPx)
-        val columnCount = 11 // Gboard فارسی: ۱۱ ستون
+        val columnCount = 11
         val keyWidthPx = (availableForKeyArea / columnCount).coerceAtLeast(dp(20))
+        val bsWidthPx = (keyWidthPx * 1.3).toInt()
 
         rows.forEachIndexed { rowIndex, rowStr ->
-            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            val line = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
             val chars = rowStr.toList().filter { it !in removed }
 
             if (rowIndex == 0) {
-                // ردیف ۱: ۱۱ حرف
                 chars.forEach { item ->
                     val v = if (english && uppercase) item.uppercaseChar().toString() else item.toString()
                     line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
             } else if (rowIndex == 1) {
-                // ردیف ۲: ۱۰ حرف (فقط ۱۰ حرف اول)
                 chars.take(10).forEach { item ->
                     val v = if (english && uppercase) item.uppercaseChar().toString() else item.toString()
                     line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
             } else {
-                // ردیف ۳: بقیه حروف + بک‌اسپیس
+                // ✅ ردیف ۳: حروف وزن‌دار + بک‌اسپیس چسبیده به راست
+                val lettersContainer = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
                 chars.drop(10).forEach { item ->
                     val v = if (english && uppercase) item.uppercaseChar().toString() else item.toString()
-                    line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
+                    lettersContainer.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
+                line.addView(lettersContainer)
+
                 if (!backspaceSeparate) {
-                    line.addView(backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, keyWidthPx, keyHeight, gapPx))
+                    val bs = backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, bsWidthPx, keyHeight, 0)
+                    bs.layoutParams = LinearLayout.LayoutParams(bsWidthPx, keyHeight).apply {
+                        setMargins(gapPx, dp(2), 0, dp(2))
+                    }
+                    line.addView(bs)
                 }
             }
             root.addView(line)
         }
 
-        // ✅ ردیف پایین استاندارد
         val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val spaceWeight = prefs.getInt("space_weight", 3).coerceIn(1, 8).toFloat()
         val enterWeight = prefs.getInt("enter_weight", 15).coerceIn(10, 25) / 10f
@@ -801,14 +844,17 @@ class KeyFarsiIme : InputMethodService() {
             }
             val bsHeight = prefs.getInt("backspace_separate_height", 0).let { if (it > 0) dp(it) else keyHeight }
             val bsWeight = prefs.getInt("backspace_weight", 2).coerceIn(1, 5).toFloat()
-            bsRow.addView(backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, 0, bsHeight, gapPx).apply {
-                layoutParams = LinearLayout.LayoutParams(0, bsHeight, bsWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
-            })
+            // ✅ در حالت جدا هم به راست بچسبه
+            val bs = backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, 0, bsHeight, 0)
+            bs.layoutParams = LinearLayout.LayoutParams(0, bsHeight, bsWeight).apply {
+                setMargins(gapPx, dp(2), 0, dp(2))
+            }
+            bsRow.addView(bs)
             root.addView(bsRow)
         }
     }
 
-    // ✅ چیدمان فشرده (غیر استاندارد)
+    // ✅ چیدمان فشرده
     private fun buildCompactLayout(
         root: LinearLayout, keyBg: Int, fg: Int, accent: Int,
         usableWidth: Int, configuredKeyWidth: Int, keyHeight: Int,
@@ -824,9 +870,14 @@ class KeyFarsiIme : InputMethodService() {
         val chunks = allChars.chunked(maxColumns)
 
         val bsInlineMultiplier = prefs.getInt("backspace_inline_width", 15).coerceIn(5, 30) / 10f
+        val bsInlineWidth = (keyWidthPx * bsInlineMultiplier).toInt()
 
         chunks.forEachIndexed { index, chunk ->
-            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            val line = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
             val emptyCount = maxColumns - chunk.size
             val emptyLeft = emptyCount / 2
             val emptyRight = emptyCount - emptyLeft
@@ -838,7 +889,12 @@ class KeyFarsiIme : InputMethodService() {
                     line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
                 if (!backspaceSeparate) {
-                    line.addView(backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, (keyWidthPx * bsInlineMultiplier).toInt(), keyHeight, gapPx))
+                    // ✅ بک‌اسپیس چسبیده به راست
+                    val bs = backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, bsInlineWidth, keyHeight, 0)
+                    bs.layoutParams = LinearLayout.LayoutParams(bsInlineWidth, keyHeight).apply {
+                        setMargins(gapPx, dp(2), 0, dp(2))
+                    }
+                    line.addView(bs)
                 }
             } else {
                 repeat(emptyLeft) { line.addView(emptyFixedKeySized(keyWidthPx, keyHeight, gapPx)) }
@@ -861,16 +917,26 @@ class KeyFarsiIme : InputMethodService() {
             }
             val bsHeight = prefs.getInt("backspace_separate_height", 0).let { if (it > 0) dp(it) else keyHeight }
             val bsWeight = prefs.getInt("backspace_weight", 2).coerceIn(1, 5).toFloat()
-            bsRow.addView(backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, 0, bsHeight, gapPx).apply {
-                layoutParams = LinearLayout.LayoutParams(0, bsHeight, bsWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
-            })
+            val bs = backspaceKeySized(Color.rgb(190, 155, 215), Color.WHITE, 0, bsHeight, 0)
+            bs.layoutParams = LinearLayout.LayoutParams(0, bsHeight, bsWeight).apply {
+                setMargins(gapPx, dp(2), 0, dp(2))
+            }
+            bsRow.addView(bs)
             root.addView(bsRow)
         }
     }
 
+    // ✅ نسخه اصلاح‌شده: long-press قابل تنظیم و بدون جا افتادن حرف
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
+
+        val alternates = when {
+            mergeSecondary != null -> listOf(mergeSecondary.toString())
+            else -> alternateChars[text.lowercase()] ?: alternateChars[text]
+        }
+        val longPressDelay = prefs.getInt("long_press_delay", 400).coerceIn(150, 1200).toLong()
+        val hasLongPress = !alternates.isNullOrEmpty()
 
         val base = TextView(this).apply {
             if (mergeSecondary != null && text.isNotEmpty()) {
@@ -880,7 +946,10 @@ class KeyFarsiIme : InputMethodService() {
                 val startIdx = text.length + 1
                 if (startIdx < fullText.length) {
                     spannable.setSpan(RelativeSizeSpan(0.6f), startIdx, fullText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    spannable.setSpan(ForegroundColorSpan(if (prefs.getBoolean("dark", false)) Color.rgb(160, 160, 160) else Color.rgb(140, 140, 140)), startIdx, fullText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    spannable.setSpan(
+                        ForegroundColorSpan(if (prefs.getBoolean("dark", false)) Color.rgb(160, 160, 160) else Color.rgb(140, 140, 140)),
+                        startIdx, fullText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
                 }
                 this.text = spannable
             } else {
@@ -893,26 +962,53 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 2
             setPadding(dp(2), dp(1), dp(2), dp(3))
             background = createKeyBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { elevation = dp(3).toFloat(); setLayerType(View.LAYER_TYPE_SOFTWARE, null) }
-            setOnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> { view.animate().translationY(dp(2).toFloat()).setDuration(40).start(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat() }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { view.animate().translationY(0f).setDuration(60).start(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start() } }
-                }
-                false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dp(3).toFloat()
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             }
-            setOnClickListener { click() }
             layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
 
-            val alternates = when {
-                mergeSecondary != null -> listOf(mergeSecondary.toString())
-                else -> alternateChars[text.lowercase()] ?: alternateChars[text]
-            }
-            if (!alternates.isNullOrEmpty()) {
-                if (alternates.size == 1) {
-                    setOnLongClickListener { commit(alternates[0]); true }
-                } else {
-                    setOnLongClickListener { v -> showAlternativesPopup(v, alternates); true }
+            // ✅ مدیریت یکپارچه touch: کلیک + long-press بدون تداخل
+            var longPressTriggered = false
+            var longPressRunnable: Runnable? = null
+
+            setOnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longPressTriggered = false
+                        view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat()
+
+                        if (hasLongPress) {
+                            longPressRunnable = Runnable {
+                                longPressTriggered = true
+                                view.animate().translationY(0f).setDuration(60).start()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(3).toFloat()
+                                if (alternates!!.size == 1) commit(alternates[0])
+                                else showAlternativesPopup(view, alternates)
+                            }
+                            handler.postDelayed(longPressRunnable!!, longPressDelay)
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        longPressRunnable?.let { handler.removeCallbacks(it) }
+                        view.animate().translationY(0f).setDuration(60).start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
+                        }
+                        if (!longPressTriggered) click()
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        longPressRunnable?.let { handler.removeCallbacks(it) }
+                        view.animate().translationY(0f).setDuration(60).start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
+                        }
+                        true
+                    }
+                    else -> false
                 }
             }
         }
@@ -942,8 +1038,18 @@ class KeyFarsiIme : InputMethodService() {
             layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
             setOnTouchListener { view, event ->
                 when (event.action) {
-                    MotionEvent.ACTION_DOWN -> { view.animate().translationY(dp(2).toFloat()).setDuration(40).start(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat(); deleteOneChar(); startRepeat(); true }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { view.animate().translationY(0f).setDuration(60).start(); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start() }; stopRepeat(); true }
+                    MotionEvent.ACTION_DOWN -> {
+                        view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat()
+                        deleteOneChar(); startRepeat(); true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.animate().translationY(0f).setDuration(60).start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
+                        }
+                        stopRepeat(); true
+                    }
                     else -> false
                 }
             }
@@ -966,6 +1072,7 @@ class KeyFarsiIme : InputMethodService() {
         val ic = currentInputConnection ?: return
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) ic.commitText("", 1) else ic.deleteSurroundingText(1, 0)
+        lastSuggestedContext = ""  // ✅ اجبار refresh
         refreshSuggestions()
     }
 
@@ -981,9 +1088,14 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
-    // ✅ کیبورد عددی: ۰ چپ، ⌫ راست
+    // ✅ کیبورد عددی با ارتفاع قابل تنظیم
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        val numKeyHeight = if (isLandscape) dp(28) else keyHeight()
+        val numKeyHeight = if (isLandscape) {
+            dp(prefs.getInt("number_key_height", 34).coerceIn(22, 60))
+        } else {
+            dp(prefs.getInt("number_key_height", 46).coerceIn(30, 80))
+        }
+        val numGap = dp(gap())
 
         val rows = listOf(
             listOf("۱", "۲", "۳"),
@@ -996,24 +1108,24 @@ class KeyFarsiIme : InputMethodService() {
                 val display = if (english) toEnglishDigits(value) else value
                 line.addView(
                     keyButton(display, keyBg, fg, 20f) { commit(if (english) toEnglishDigits(value) else value) },
-                    LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) }
+                    LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
                 )
             }
             root.addView(line)
         }
 
-        // ✅ ردیف آخر: ۰ چپ، ⌫ راست
+        // ردیف آخر: ۰ چپ، ⌫ راست (چسبیده به لبه)
         val lastRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val zeroDisplay = if (english) "0" else "۰"
         lastRow.addView(
             keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") },
-            LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) }
+            LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
         )
-        lastRow.addView(
-            backspaceKeySized(keyBg, fg, 0, numKeyHeight, dp(gap())).apply {
-                layoutParams = LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) }
-            }
-        )
+        val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
+        bs.layoutParams = LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
+            setMargins(numGap, dp(2), 0, dp(2))
+        }
+        lastRow.addView(bs)
         root.addView(lastRow)
 
         val symbolsRow = listOf("؟","%","@","×","+","_","=",".")
@@ -1024,11 +1136,11 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(symLine)
 
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        controls.addView(actionButton(t("mode_letters"), keyBg, fg) { numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-        controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { symbolMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { emojiMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-        controls.addView(keyButton(" ", keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-        controls.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
+        controls.addView(actionButton(t("mode_letters"), keyBg, fg) { numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { symbolMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { emojiMode = true; numberMode = false; refreshKeyboard() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(keyButton(" ", keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         root.addView(controls)
     }
 
@@ -1218,6 +1330,7 @@ class KeyFarsiIme : InputMethodService() {
         suggestionRow = null
         stopRepeat()
         suggestionRunnable?.let { handler.removeCallbacks(it) }
+        lastSuggestedContext = ""
         lastSettingsHash = computeSettingsHash()
         setInputView(buildKeyboard())
     }
@@ -1248,7 +1361,8 @@ class KeyFarsiIme : InputMethodService() {
 
         var correctedCurrentWord = currentWord
         val autoCorrect = prefs.getBoolean("auto_correct", true)
-        val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 800).toLong()
+        // ✅ آستانه تایپ آرام: پیش‌فرض ۱۵۰۰ms (قبلاً ۸۰۰ بود)
+        val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 1500).coerceIn(500, 5000).toLong()
         val isSlowTyping = timeSinceLastKey > slowTypingThreshold
 
         if (currentWord.length >= 2 && !english && !isSensitiveInput() && value == " ") {
@@ -1475,7 +1589,6 @@ class KeyFarsiIme : InputMethodService() {
         } catch (_: Exception) { "" }
     }
 
-    // ✅ بعد از انتخاب پیشنهاد، فاصله خودکار
     private fun replaceCurrentWord(newWord: String) {
         val oldWord = getCurrentWord()
         if (oldWord.isNotEmpty()) {
@@ -1485,9 +1598,9 @@ class KeyFarsiIme : InputMethodService() {
             currentInputConnection?.deleteSurroundingText(oldWord.length, 0)
         }
         currentInputConnection?.commitText(newWord, 1)
-        // ✅ فاصله خودکار بعد از پیشنهاد
         currentInputConnection?.commitText(" ", 1)
         learnWord(newWord)
+        lastSuggestedContext = ""
         refreshSuggestions()
     }
 
@@ -1536,13 +1649,17 @@ class KeyFarsiIme : InputMethodService() {
             val count = if (PersianSpellChecker.normalize(oldWord) == value) old.optInt("count", 0) + 1 else 1
             memory.put(key, JSONObject().put("word", chosen).put("count", count.coerceAtMost(100)))
             prefs.edit().putString("correction_memory", memory.toString()).apply()
+            cachedCorrectionMemory = memory
         } catch (e: Exception) {
             android.util.Log.e("KeyFarsi", "correction memory save error", e)
         }
     }
 
     private fun loadCorrectionMemory(): JSONObject {
-        return try { JSONObject(prefs.getString("correction_memory", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        if (cachedCorrectionMemory == null) {
+            cachedCorrectionMemory = try { JSONObject(prefs.getString("correction_memory", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        }
+        return cachedCorrectionMemory!!
     }
 
     private fun findSuggestions(word: String): List<String> {
@@ -1563,10 +1680,14 @@ class KeyFarsiIme : InputMethodService() {
         val currentCount = words.optInt(word, 0)
         words.put(word, (currentCount + 1).coerceAtMost(1000))
         prefs.edit().putString("learned_words", words.toString()).apply()
+        cachedLearnedWords = words
     }
 
     private fun loadLearnedWords(): JSONObject {
-        return try { JSONObject(prefs.getString("learned_words", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        if (cachedLearnedWords == null) {
+            cachedLearnedWords = try { JSONObject(prefs.getString("learned_words", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        }
+        return cachedLearnedWords!!
     }
 
     private val normalizedDictionary: Set<String> by lazy {
