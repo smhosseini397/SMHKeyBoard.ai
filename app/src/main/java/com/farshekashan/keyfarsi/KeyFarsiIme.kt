@@ -50,6 +50,7 @@ class KeyFarsiIme : InputMethodService() {
     private val handler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
     private var suggestionRunnable: Runnable? = null
+    private var pendingSuggestUpdate: Runnable? = null
     private var lastKeyTime = 0L
     private var lastSettingsHash = 0
 
@@ -248,6 +249,7 @@ class KeyFarsiIme : InputMethodService() {
         try { prefs.unregisterOnSharedPreferenceChangeListener(prefsListener) } catch (_: Exception) {}
         stopRepeat()
         suggestionRunnable?.let { handler.removeCallbacks(it) }
+        pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
         super.onDestroy()
     }
 
@@ -313,7 +315,6 @@ class KeyFarsiIme : InputMethodService() {
         return buildKeyboard()
     }
 
-    // ✅ ناحیه لمسی: TOUCHABLE_INSETS_FRAME خودکار کل فریم را لمسی می‌کند
     override fun onComputeInsets(outInsets: Insets) {
         super.onComputeInsets(outInsets)
         if (!isInputViewShown) return
@@ -365,7 +366,6 @@ class KeyFarsiIme : InputMethodService() {
             if (requestedWidth > 0) dp(requestedWidth).coerceAtMost(screenWidth) - (paddingPx * 2) else screenWidth - (paddingPx * 2)
         }
 
-        // ✅ ارتفاع کمتر در landscape تا محتوا زیر کادر نرود
         val heightToUse = if (isLandscape) {
             if (requestedHeightLandscape > 0) {
                 dp(requestedHeightLandscape).coerceAtMost((screenHeight * 0.50).toInt())
@@ -465,15 +465,17 @@ class KeyFarsiIme : InputMethodService() {
     }
 
     private fun refreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
-        val current = getCurrentWord()
-        val lastWord = getLastCompletedWord()
-        val ctx = "$current|$lastWord"
-        if (ctx == lastSuggestedContext) return
-        lastSuggestedContext = ctx
-
         suggestionRunnable?.let { handler.removeCallbacks(it) }
-        suggestionRunnable = Runnable { doRefreshSuggestions(keyBg, fg) }
-        handler.postDelayed(suggestionRunnable!!, 120L)
+        suggestionRunnable = Runnable {
+            val current = getCurrentWord()
+            val lastWord = getLastCompletedWord()
+            val ctx = "$current|$lastWord"
+            if (ctx != lastSuggestedContext) {
+                lastSuggestedContext = ctx
+                doRefreshSuggestions(keyBg, fg)
+            }
+        }
+        handler.postDelayed(suggestionRunnable!!, 180L)
     }
 
     private fun doRefreshSuggestions(keyBg: Int? = null, fg: Int? = null) {
@@ -751,7 +753,6 @@ class KeyFarsiIme : InputMethodService() {
         val currentRootHeight = keyboardRoot?.layoutParams?.height ?: (screenHeight * 0.42).toInt()
         val availableForKeyArea = currentRootHeight - dp(90)
 
-        // ✅ ارتفاع کلیدها با سقف کمتر در landscape تا سرریز نکند
         val dynamicKeyHeight = if (rawKeyHeight > 0) {
             dp(rawKeyHeight)
         } else {
@@ -925,7 +926,7 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ نسخه مقاوم در برابر لمس‌های جا افتاده — slop سیستم به‌جای درصد عرض
+    // ✅ نسخه مقاوم در برابر لمس‌های جا افتاده
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -1002,15 +1003,15 @@ class KeyFarsiIme : InputMethodService() {
                         if (!longPressTriggered) {
                             val dx = abs(event.x - downX)
                             val dy = abs(event.y - downY)
-                            // لغو long-press فقط با slop واقعی سیستم × 3
                             if (dx > touchSlop * 3 || dy > touchSlop * 3) {
                                 longPressRunnable?.let { handler.removeCallbacks(it) }
                                 longPressRunnable = null
                             }
-                            // movedOutside فقط وقتی واقعاً از خود ویو بیرون رفته
-                            if (event.x < -touchSlop || event.x > view.width + touchSlop ||
-                                event.y < -touchSlop || event.y > view.height + touchSlop) {
-                                movedOutside = true
+                            if (view.width > 0 && view.height > 0) {
+                                if (event.x < -touchSlop || event.x > view.width + touchSlop ||
+                                    event.y < -touchSlop || event.y > view.height + touchSlop) {
+                                    movedOutside = true
+                                }
                             }
                         }
                         true
@@ -1034,6 +1035,10 @@ class KeyFarsiIme : InputMethodService() {
                         view.animate().translationY(0f).setDuration(60).start()
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
+                        }
+                        if (!longPressTriggered && !movedOutside) {
+                            view.performClick()
+                            click()
                         }
                         true
                     }
@@ -1122,14 +1127,30 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
+    // ✅ کیبورد عددی: ارتفاع دکمه‌ها با number_key_height، اندازه/فاصله با fa_key_*
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        val numKeyHeight = if (isLandscape) {
-            dp(prefs.getInt("number_key_height", 34).coerceIn(22, 60))
-        } else {
-            dp(prefs.getInt("number_key_height", 46).coerceIn(30, 80))
+        // ✅ ارتفاع دکمه‌های عدد از number_key_height، ولی در صورت خالی بودن از fa_key_height
+        val rawNumHeight = prefs.getInt("number_key_height", 0)
+        val fallbackFaHeight = prefs.getInt("fa_key_height", 0)
+        val baseNumHeightDp = when {
+            rawNumHeight > 0 -> rawNumHeight
+            fallbackFaHeight > 0 -> fallbackFaHeight
+            else -> if (isLandscape) 34 else 46
         }
-        val numGap = dp(gap())
+        val numKeyHeight = dp(
+            if (isLandscape) baseNumHeightDp.coerceIn(22, 60)
+            else baseNumHeightDp.coerceIn(30, 80)
+        )
 
+        // ✅ فاصله بین دکمه‌های عدد با fa_key_gap
+        val faGapRaw = prefs.getInt("fa_key_gap", 0)
+        val numGap = dp(if (faGapRaw > 0) faGapRaw else DEFAULT_KEY_GAP)
+
+        // ✅ عرض دکمه‌های عددی: اگر fa_key_width تنظیم شده، grid را با آن می‌سازیم
+        val faKeyWidthRaw = prefs.getInt("fa_key_width", 0)
+        val numKeyWidthConfigured = if (faKeyWidthRaw > 0) dp(faKeyWidthRaw) else 0
+
+        // ردیف‌های عدد: ۴ ردیف ۳ ستونی برای ۱..۹، ۰ و backspace
         val rows = listOf(
             listOf("۱", "۲", "۳"),
             listOf("۴", "۵", "۶"),
@@ -1139,10 +1160,17 @@ class KeyFarsiIme : InputMethodService() {
             val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
             row.forEach { value ->
                 val display = if (english) toEnglishDigits(value) else value
-                line.addView(
-                    keyButton(display, keyBg, fg, 20f) { commit(if (english) toEnglishDigits(value) else value) },
-                    LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
-                )
+                val cellView = keyButton(display, keyBg, fg, 20f) { commit(if (english) toEnglishDigits(value) else value) }
+                val lp = if (numKeyWidthConfigured > 0) {
+                    LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight).apply {
+                        setMargins(numGap, dp(2), numGap, dp(2))
+                    }
+                } else {
+                    LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
+                        setMargins(numGap, dp(2), numGap, dp(2))
+                    }
+                }
+                line.addView(cellView, lp)
             }
             root.addView(line)
         }
@@ -1150,21 +1178,39 @@ class KeyFarsiIme : InputMethodService() {
         // ✅ ردیف آخر: صفر وزن ۲، backspace وزن ۱
         val lastRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val zeroDisplay = if (english) "0" else "۰"
-        lastRow.addView(
-            keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") },
-            LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
-        )
-        val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
-        bs.layoutParams = LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
-            setMargins(numGap, dp(2), 0, dp(2))
+        val zeroView = keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") }
+        val zeroLp = if (numKeyWidthConfigured > 0) {
+            LinearLayout.LayoutParams(numKeyWidthConfigured * 2, numKeyHeight).apply {
+                setMargins(numGap, dp(2), numGap, dp(2))
+            }
+        } else {
+            LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply {
+                setMargins(numGap, dp(2), numGap, dp(2))
+            }
         }
+        lastRow.addView(zeroView, zeroLp)
+
+        val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
+        val bsLp = if (numKeyWidthConfigured > 0) {
+            LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight).apply {
+                setMargins(numGap, dp(2), 0, dp(2))
+            }
+        } else {
+            LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
+                setMargins(numGap, dp(2), 0, dp(2))
+            }
+        }
+        bs.layoutParams = bsLp
         lastRow.addView(bs)
         root.addView(lastRow)
 
         val symbolsRow = listOf("؟","%","@","×","+","_","=",".")
         val symLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         symbolsRow.forEach { s ->
-            symLine.addView(keyButton(s, keyBg, fg, 16f) { commit(s) }, LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
+            symLine.addView(
+                keyButton(s, keyBg, fg, 16f) { commit(s) },
+                LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
+            )
         }
         root.addView(symLine)
 
@@ -1290,7 +1336,7 @@ class KeyFarsiIme : InputMethodService() {
         gravity = Gravity.CENTER_VERTICAL
     }
 
-    // ✅ نسخه مقاوم در برابر لمس برای دکمه‌های عمومی
+    // ✅ دکمه عمومی — بدون لغو ناخواسته کلیک
     private fun keyButton(text: String, bg: Int, fg: Int, size: Float = 18f, click: () -> Unit): TextView {
         return TextView(this).apply {
             this.text = text
@@ -1323,9 +1369,11 @@ class KeyFarsiIme : InputMethodService() {
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (event.x < -touchSlop || event.x > view.width + touchSlop ||
-                            event.y < -touchSlop || event.y > view.height + touchSlop) {
-                            movedOutside = true
+                        if (view.width > 0 && view.height > 0) {
+                            if (event.x < -touchSlop || event.x > view.width + touchSlop ||
+                                event.y < -touchSlop || event.y > view.height + touchSlop) {
+                                movedOutside = true
+                            }
                         }
                         true
                     }
@@ -1344,6 +1392,10 @@ class KeyFarsiIme : InputMethodService() {
                         view.animate().translationY(0f).setDuration(60).start()
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
+                        }
+                        if (!movedOutside) {
+                            view.performClick()
+                            click()
                         }
                         true
                     }
@@ -1404,11 +1456,13 @@ class KeyFarsiIme : InputMethodService() {
         suggestionRow = null
         stopRepeat()
         suggestionRunnable?.let { handler.removeCallbacks(it) }
+        pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
         lastSuggestedContext = ""
         lastSettingsHash = computeSettingsHash()
         setInputView(buildKeyboard())
     }
 
+    // ✅ commit سبک: در هر حرف فقط یک commitText
     private fun commit(value: String) {
         val ic = currentInputConnection ?: return
         val now = System.currentTimeMillis()
@@ -1417,14 +1471,12 @@ class KeyFarsiIme : InputMethodService() {
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
-            val beforeCursor = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
-            if (beforeCursor.isNotEmpty() && beforeCursor.last().isDigit() && value.firstOrNull()?.isLetter() == true) {
-                ic.commitText(" ", 1)
-            }
             val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
             ic.commitText(finalValue, 1)
-            if (value == " ") uppercase = false
-            refreshSuggestions()
+
+            pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
+            pendingSuggestUpdate = Runnable { refreshSuggestions() }
+            handler.postDelayed(pendingSuggestUpdate!!, 250L)
             return
         }
 
@@ -1438,9 +1490,7 @@ class KeyFarsiIme : InputMethodService() {
         val isSlowTyping = timeSinceLastKey > slowTypingThreshold
 
         if (currentWord.length >= 2 && !english && !isSensitiveInput() && value == " ") {
-            if (isKnownCorrectWord(currentWord)) {
-                learnWord(currentWord)
-            }
+            if (isKnownCorrectWord(currentWord)) learnWord(currentWord)
         }
 
         if (autoCorrect && value == " " && currentWord.length >= 2 && !english && !isSensitiveInput() && !isSlowTyping) {
@@ -1462,7 +1512,10 @@ class KeyFarsiIme : InputMethodService() {
 
         ic.commitText(value, 1)
         if (value == " ") uppercase = false
-        refreshSuggestions()
+
+        pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
+        pendingSuggestUpdate = Runnable { refreshSuggestions() }
+        handler.postDelayed(pendingSuggestUpdate!!, 120L)
     }
 
     private fun isNumericInput(): Boolean {
