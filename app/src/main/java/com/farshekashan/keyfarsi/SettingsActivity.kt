@@ -41,7 +41,9 @@ class SettingsActivity : Activity() {
         MergeOption("merge_dal_zal",    "merge_dal_zal_delete",    "ادغام د و ذ (نگه‌داشتن د → ذ)"),
         MergeOption("merge_seen_the",   "merge_seen_the_delete",   "ادغام س و ث (نگه‌داشتن س → ث)"),
         MergeOption("merge_ain_ghain",  "merge_ain_ghain_delete",  "ادغام ع و غ (نگه‌داشتن ع → غ)"),
-        MergeOption("merge_che_je",     "merge_che_je_delete",     "ادغام چ و ج (نگه‌داشتن چ → ج)")
+        MergeOption("merge_che_je",     "merge_che_je_delete",     "ادغام چ و ج (نگه‌داشتن چ → ج)"),
+        // ✅ ادغام ح و خ اضافه شد
+        MergeOption("merge_he_khe",     "merge_he_khe_delete",     "ادغام ح و خ (نگه‌داشتن ح → خ)")
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -227,9 +229,10 @@ class SettingsActivity : Activity() {
             setPadding(0, dp(4), 0, dp(8))
         })
 
+        // ✅ توضیح اصلاح‌شده: این تنظیم مدت زمان تایپ کل کلمه را می‌سنجد
         addNumberField(
             outer,
-            "آستانه تایپ آرام (میلی‌ثانیه) - بیشتر = تصحیح کمتر\nپیشنهاد: ۱۵۰۰ms برای تایپ عادی",
+            "آستانه تایپ آرام (میلی‌ثانیه)\nاگر کل کلمه را در بیش از این مدت تایپ کنی، تصحیح خودکار انجام نمی‌شود. بیشتر = تصحیح کمتر\nپیشنهاد: ۱۵۰۰ms برای تایپ عادی",
             "slow_typing_threshold",
             1500,
             300,
@@ -354,6 +357,16 @@ class SettingsActivity : Activity() {
         }
         outer.addView(standardBig)
 
+        // ✅ دکمه‌های نقطه و علامت سوال بین فاصله و اینتر (در هر دو حالت)
+        val punctuation = CheckBox(this).apply {
+            text = "نمایش دکمه‌های «.» و «؟» بین دکمه فاصله و اینتر"
+            isChecked = prefs.getBoolean("punctuation_near_enter", true)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("punctuation_near_enter", checked).apply()
+            }
+        }
+        outer.addView(punctuation)
+
         outer.addView(sectionTitle("ادغام کلیدهای هم‌خانواده"))
         outer.addView(TextView(this).apply {
             text = "این تنظیمات با تب عمومی مشترک است."
@@ -431,7 +444,6 @@ class SettingsActivity : Activity() {
         }
         outer.addView(dark)
 
-        // ✅ گزینه فعال/غیرفعال کردن انیمیشن فشردن کلیدها
         val pressAnim = CheckBox(this).apply {
             text = "انیمیشن فشردن کلیدها (اگر کندی حس می‌کنی خاموش کن)"
             isChecked = prefs.getBoolean("key_press_animation", true)
@@ -489,7 +501,6 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
 
-        // ✅ بخش جدید: اندازه صفحه کلید عددی (مستقل از حروف)
         outer.addView(sectionTitle("اندازه صفحه کلید عددی (مستقل از حروف)"))
         outer.addView(TextView(this).apply {
             text = "این مقادیر فقط روی صفحه اعداد اعمال می‌شوند و با تغییر اندازه دکمه‌های حروف، اعداد تغییر نمی‌کنند.\n۰ = خودکار (کششی)"
@@ -558,9 +569,6 @@ class SettingsActivity : Activity() {
         })
         addNumberField(outer, "جابه‌جایی عمودی (dp) - ۱۰۰- تا ۲۰۰", "keyboard_vertical_offset", 0, -100, 200)
 
-        // -----------------------------------------------------------------
-        // بازنشانی
-        // -----------------------------------------------------------------
         val reset = Button(this).apply {
             text = "بازنشانی همه تنظیمات به پیش‌فرض"
             setOnClickListener {
@@ -599,6 +607,9 @@ class SettingsActivity : Activity() {
                     .putBoolean("merge_ain_ghain_delete", false)
                     .putBoolean("merge_che_je", false)
                     .putBoolean("merge_che_je_delete", false)
+                    // ✅ ادغام ح و خ
+                    .putBoolean("merge_he_khe", false)
+                    .putBoolean("merge_he_khe_delete", false)
                     .putBoolean("backspace_separate_row", false)
                     .putInt("backspace_weight", 2)
                     .putInt("backspace_separate_height", 0)
@@ -614,11 +625,12 @@ class SettingsActivity : Activity() {
                     .putBoolean("standard_big_keyboard", false)
                     .putInt("long_press_delay", 400)
                     .putInt("number_key_height", 46)
-                    // ✅ پیش‌فرض‌های جدید
                     .putInt("num_key_width", 0)
                     .putInt("num_key_height", 46)
                     .putInt("num_key_gap", 4)
                     .putBoolean("key_press_animation", true)
+                    // ✅ دکمه‌های نقطه و علامت سوال بین فاصله و اینتر
+                    .putBoolean("punctuation_near_enter", true)
                     .apply()
                 Toast.makeText(this@SettingsActivity, "تنظیمات بازنشانی شد", Toast.LENGTH_SHORT).show()
                 recreate()
