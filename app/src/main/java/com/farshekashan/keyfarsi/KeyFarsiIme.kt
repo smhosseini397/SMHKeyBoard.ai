@@ -1381,12 +1381,15 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildKeyboard())
     }
 
-    // ✅ اگر کاراکتر قبل عدد بود و الان حرف تایپ شد، یک فاصله خودکار قبل از حرف
+    // ✅ ارقام (فارسی/عربی/انگلیسی)
     private fun isDigitChar(c: Char): Boolean =
         c in '0'..'9' || c in '۰'..'۹' || c in '٠'..'٩'
 
-    private fun isLetterChar(c: Char): Boolean =
-        c.isLetter() || c in '\u0600'..'\u06FF' || c in '\u200c'..'\u200f'
+    // ✅ حرف واقعی: ارقام هرگز حرف نیستند
+    private fun isLetterChar(c: Char): Boolean {
+        if (isDigitChar(c)) return false
+        return c.isLetter() || c in '\u0600'..'\u06FF' || c in '\u200c'..'\u200f'
+    }
 
     private fun commit(value: String) {
         val ic = currentInputConnection ?: return
@@ -1396,7 +1399,7 @@ class KeyFarsiIme : InputMethodService() {
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
-            // ✅ فاصله خودکار: اگر الان حرف تایپ می‌شود و کاراکتر قبل عدد بود
+            // ✅ فاصله خودکار فقط وقتی حرف تایپ می‌شود و کاراکتر قبل عدد بود
             if (value.length == 1 && isLetterChar(value[0])) {
                 try {
                     val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
