@@ -52,6 +52,7 @@ class KeyFarsiIme : InputMethodService() {
     private var suggestionRunnable: Runnable? = null
     private var pendingSuggestUpdate: Runnable? = null
     private var lastKeyTime = 0L
+    private var wordStartTime = 0L
     private var lastSettingsHash = 0
 
     private var cachedBigrams: JSONObject? = null
@@ -85,10 +86,12 @@ class KeyFarsiIme : InputMethodService() {
             "merge_seen_the", "merge_seen_the_delete",
             "merge_ain_ghain", "merge_ain_ghain_delete",
             "merge_che_je", "merge_che_je_delete",
+            "merge_he_khe", "merge_he_khe_delete",
             "standard_big_keyboard", "fa_key_width", "fa_key_height", "fa_key_gap",
             "en_key_width", "en_key_height", "en_key_gap",
             "num_key_width", "num_key_height", "num_key_gap",
             "key_press_animation",
+            "punctuation_near_enter",
             "keyboard_width", "keyboard_height",
             "keyboard_width_landscape", "keyboard_height_landscape",
             "keyboard_vertical_offset", "backspace_separate_row",
@@ -175,7 +178,8 @@ class KeyFarsiIme : InputMethodService() {
         MergeSpec('د', 'ذ', "merge_dal_zal",   "merge_dal_zal_delete"),
         MergeSpec('س', 'ث', "merge_seen_the",  "merge_seen_the_delete"),
         MergeSpec('ع', 'غ', "merge_ain_ghain", "merge_ain_ghain_delete"),
-        MergeSpec('چ', 'ج', "merge_che_je",    "merge_che_je_delete")
+        MergeSpec('چ', 'ج', "merge_che_je",    "merge_che_je_delete"),
+        MergeSpec('ح', 'خ', "merge_he_khe",    "merge_he_khe_delete")
     )
 
     private fun activeMerges(): Map<Char, Char> {
@@ -259,6 +263,7 @@ class KeyFarsiIme : InputMethodService() {
         val stringKeys = listOf("theme")
         val booleanKeys = listOf(
             "dark", "standard_big_keyboard", "key_press_animation",
+            "punctuation_near_enter",
             "merge_key_kaf", "merge_key_kaf_delete",
             "merge_key_re", "merge_key_re_delete",
             "merge_ta_za", "merge_ta_za_delete",
@@ -267,6 +272,7 @@ class KeyFarsiIme : InputMethodService() {
             "merge_seen_the", "merge_seen_the_delete",
             "merge_ain_ghain", "merge_ain_ghain_delete",
             "merge_che_je", "merge_che_je_delete",
+            "merge_he_khe", "merge_he_khe_delete",
             "backspace_separate_row", "auto_correct"
         )
         val intKeys = listOf(
@@ -294,6 +300,7 @@ class KeyFarsiIme : InputMethodService() {
         super.onStartInput(attribute, restarting)
         pendingSend = null
         lastKeyTime = 0L
+        wordStartTime = 0L
         saveClipboardCurrent()
         val newHash = computeSettingsHash()
         if (newHash != lastSettingsHash && isInputViewShown) {
@@ -825,6 +832,12 @@ class KeyFarsiIme : InputMethodService() {
         bottom.addView(actionButton(t("key_globe"), keyBg, fg) { english = !english; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
         if (english) bottom.addView(actionButton(t("key_shift"), keyBg, fg) { uppercase = !uppercase; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
         bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeight, spaceWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
+
+        if (prefs.getBoolean("punctuation_near_enter", true)) {
+            bottom.addView(keyButton(".", keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
+            bottom.addView(keyButton("؟", keyBg, fg) { commit("؟") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
+        }
+
         bottom.addView(actionButton(t("key_enter"), accent, Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeight, enterWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
         root.addView(bottom)
 
@@ -922,7 +935,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ کلید حرفی: long-press با تأخیر قابل تنظیم از prefs["long_press_delay"]
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -966,41 +978,42 @@ class KeyFarsiIme : InputMethodService() {
             isClickable = true
             isFocusable = true
 
-            // ✅ کلیک استاندارد: همیشه برای تایپ عادی اجرا می‌شود
-            setOnClickListener { click() }
+            var longPressTriggered = false
+            var executed = false
+            var longPressRunnable: Runnable? = null
 
-            if (hasLongPress) {
-                var longPressTriggered = false
-                var longPressRunnable: Runnable? = null
-
-                // ✅ long-press سفارشی با تأخیر دلخواه از prefs
-                setOnTouchListener { view, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            longPressTriggered = false
-                            longPressRunnable?.let { handler.removeCallbacks(it) }
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longPressTriggered = false
+                        executed = false
+                        longPressRunnable?.let { handler.removeCallbacks(it) }
+                        if (hasLongPress) {
                             longPressRunnable = Runnable {
                                 longPressTriggered = true
+                                executed = true
                                 if (alternates!!.size == 1) commit(alternates[0])
                                 else showAlternativesPopup(view, alternates)
                             }
                             handler.postDelayed(longPressRunnable!!, longPressDelay)
-                            false // اجازه بده setOnClickListener هم کار کنه
                         }
-                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                            longPressRunnable?.let { handler.removeCallbacks(it) }
-                            longPressRunnable = null
-                            if (longPressTriggered) {
-                                // long-press اجرا شد → جلوگیری از کلیک
-                                true
-                            } else {
-                                false // setOnClickListener خودش UP را پردازش می‌کند
-                            }
-                        }
-                        else -> false
+                        true
                     }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        longPressRunnable?.let { handler.removeCallbacks(it) }
+                        longPressRunnable = null
+                        if (!longPressTriggered && !executed) {
+                            executed = true
+                            view.performClick()
+                            click()
+                        }
+                        true
+                    }
+                    else -> false
                 }
             }
+
+            setOnClickListener { }
         }
         return base
     }
@@ -1061,6 +1074,7 @@ class KeyFarsiIme : InputMethodService() {
         val ic = currentInputConnection ?: return
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) ic.commitText("", 1) else ic.deleteSurroundingText(1, 0)
+        wordStartTime = 0L
         lastSuggestedContext = ""
         refreshSuggestions()
     }
@@ -1073,6 +1087,12 @@ class KeyFarsiIme : InputMethodService() {
         bottom.addView(actionButton(t("key_globe"), keyBg, fg) { english = !english; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         if (english) bottom.addView(actionButton(t("key_shift"), keyBg, fg) { uppercase = !uppercase; refreshKeyboard() }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeight, spaceWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
+
+        if (prefs.getBoolean("punctuation_near_enter", true)) {
+            bottom.addView(keyButton(".", keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
+            bottom.addView(keyButton("؟", keyBg, fg) { commit("؟") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
+        }
+
         bottom.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeight, enterWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         root.addView(bottom)
     }
@@ -1142,7 +1162,7 @@ class KeyFarsiIme : InputMethodService() {
         lastRow.addView(bs, bsLp)
         root.addView(lastRow)
 
-        val symbolsRow = listOf("؟","%","@","×","+","_","=",".")
+        val symbolsRow = listOf("؟","@","×","+","_","=",".")
         val symLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         symbolsRow.forEach { s ->
             val cell = numberKeyView(s, keyBg, fg) { commit(s) }
@@ -1434,6 +1454,12 @@ class KeyFarsiIme : InputMethodService() {
         lastKeyTime = now
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
+
+        // ✅ شروع کلمه جدید = اولین حرف بعد از space/علائم
+        if (!isWordBoundary && wordStartTime == 0L) {
+            wordStartTime = now
+        }
+
         if (!isWordBoundary) {
             if (value.length == 1 && isLetterChar(value[0])) {
                 try {
@@ -1461,7 +1487,9 @@ class KeyFarsiIme : InputMethodService() {
         var correctedCurrentWord = currentWord
         val autoCorrect = prefs.getBoolean("auto_correct", true)
         val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 1500).coerceIn(500, 5000).toLong()
-        val isSlowTyping = timeSinceLastKey > slowTypingThreshold
+        // ✅ زمان کل تایپ کلمه (از اولین حرف تا space فعلی)
+        val totalWordTime = if (wordStartTime == 0L) 0L else now - wordStartTime
+        val isSlowTyping = totalWordTime > slowTypingThreshold
 
         if (currentWord.length >= 2 && !english && !isSensitiveInput() && value == " ") {
             if (isKnownCorrectWord(currentWord)) learnWord(currentWord)
@@ -1486,6 +1514,11 @@ class KeyFarsiIme : InputMethodService() {
 
         ic.commitText(value, 1)
         if (value == " ") uppercase = false
+
+        // ✅ با space/enter، کلمه بعدی از نو شروع می‌شود
+        if (value == " " || value == "\n") {
+            wordStartTime = 0L
+        }
 
         pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
         pendingSuggestUpdate = Runnable { refreshSuggestions() }
@@ -1699,6 +1732,7 @@ class KeyFarsiIme : InputMethodService() {
         currentInputConnection?.commitText(newWord, 1)
         currentInputConnection?.commitText(" ", 1)
         learnWord(newWord)
+        wordStartTime = 0L
         lastSuggestedContext = ""
         refreshSuggestions()
     }
