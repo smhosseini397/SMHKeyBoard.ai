@@ -22,7 +22,6 @@ import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.*
@@ -834,8 +833,8 @@ class KeyFarsiIme : InputMethodService() {
         bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeight, spaceWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
 
         if (prefs.getBoolean("punctuation_near_enter", true)) {
-            bottom.addView(keyButton(".", keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
-            bottom.addView(keyButton("؟", keyBg, fg) { commit("؟") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
+            val punct = punctuationKey(keyBg, fg)
+            bottom.addView(punct, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
         }
 
         bottom.addView(actionButton(t("key_enter"), accent, Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeight, enterWeight).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) })
@@ -970,7 +969,7 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 2
             setPadding(dp(2), dp(1), dp(2), dp(3))
             background = createKeyStateBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
@@ -1034,7 +1033,7 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
             background = createKeyStateBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             layoutParams = LinearLayout.LayoutParams(widthPx, heightPx).apply { setMargins(gapPx, dp(2), gapPx, dp(2)) }
@@ -1089,8 +1088,8 @@ class KeyFarsiIme : InputMethodService() {
         bottom.addView(keyButton(t("key_space"), keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, keyHeight, spaceWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
 
         if (prefs.getBoolean("punctuation_near_enter", true)) {
-            bottom.addView(keyButton(".", keyBg, fg) { commit(".") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
-            bottom.addView(keyButton("؟", keyBg, fg) { commit("؟") }, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
+            val punct = punctuationKey(keyBg, fg)
+            bottom.addView(punct, LinearLayout.LayoutParams(0, keyHeight, 1f).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
         }
 
         bottom.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, keyHeight, enterWeight).apply { setMargins(dp(gap()), dp(2), dp(gap()), dp(2)) })
@@ -1189,7 +1188,7 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
             background = createKeyStateBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             isClickable = true
@@ -1207,7 +1206,7 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
             background = createKeyStateBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             isClickable = true
@@ -1345,12 +1344,59 @@ class KeyFarsiIme : InputMethodService() {
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
             background = createKeyStateBackground(bg)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             isClickable = true
             isFocusable = true
             setOnClickListener { click() }
+        }
+    }
+
+    private fun punctuationKey(bg: Int, fg: Int): TextView {
+        val longPressDelay = prefs.getInt("long_press_delay", 400).coerceIn(150, 1200).toLong()
+        return TextView(this).apply {
+            text = "؟"
+            textSize = 18f
+            setTextColor(fg)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setPadding(dp(2), dp(1), dp(2), dp(3))
+            background = createKeyStateBackground(bg)
+            if (prefs.getBoolean("key_press_animation", true) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dp(3).toFloat()
+            }
+            isClickable = true
+            isFocusable = true
+
+            var longPressTriggered = false
+            var executed = false
+            var runnable: Runnable? = null
+
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longPressTriggered = false
+                        executed = false
+                        runnable?.let { handler.removeCallbacks(it) }
+                        runnable = Runnable { longPressTriggered = true; executed = true; commit(".") }
+                        handler.postDelayed(runnable!!, longPressDelay)
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        runnable?.let { handler.removeCallbacks(it) }
+                        runnable = null
+                        if (!longPressTriggered && !executed) {
+                            executed = true
+                            view.performClick()
+                            commit("؟")
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+            setOnClickListener { }
         }
     }
 
@@ -1404,7 +1450,12 @@ class KeyFarsiIme : InputMethodService() {
         val normal = LayerDrawable(arrayOf(InsetDrawable(normalShadow, 0, 0, 0, dp(2)), normalMain))
 
         val animationEnabled = prefs.getBoolean("key_press_animation", true)
-        if (!animationEnabled) return normal
+        if (!animationEnabled) {
+            return StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), normal)
+                addState(intArrayOf(), normal)
+            }
+        }
 
         val pressedTop = darken(topColor, 20)
         val pressedBottom = darken(bottomColor, 20)
@@ -1455,7 +1506,6 @@ class KeyFarsiIme : InputMethodService() {
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
 
-        // ✅ شروع کلمه جدید = اولین حرف بعد از space/علائم
         if (!isWordBoundary && wordStartTime == 0L) {
             wordStartTime = now
         }
@@ -1487,7 +1537,6 @@ class KeyFarsiIme : InputMethodService() {
         var correctedCurrentWord = currentWord
         val autoCorrect = prefs.getBoolean("auto_correct", true)
         val slowTypingThreshold = prefs.getInt("slow_typing_threshold", 1500).coerceIn(500, 5000).toLong()
-        // ✅ زمان کل تایپ کلمه (از اولین حرف تا space فعلی)
         val totalWordTime = if (wordStartTime == 0L) 0L else now - wordStartTime
         val isSlowTyping = totalWordTime > slowTypingThreshold
 
@@ -1515,7 +1564,6 @@ class KeyFarsiIme : InputMethodService() {
         ic.commitText(value, 1)
         if (value == " ") uppercase = false
 
-        // ✅ با space/enter، کلمه بعدی از نو شروع می‌شود
         if (value == " " || value == "\n") {
             wordStartTime = 0L
         }
