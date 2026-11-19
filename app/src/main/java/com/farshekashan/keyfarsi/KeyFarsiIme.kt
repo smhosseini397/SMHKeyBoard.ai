@@ -87,6 +87,8 @@ class KeyFarsiIme : InputMethodService() {
             "merge_che_je", "merge_che_je_delete",
             "standard_big_keyboard", "fa_key_width", "fa_key_height", "fa_key_gap",
             "en_key_width", "en_key_height", "en_key_gap",
+            "num_key_width", "num_key_height", "num_key_gap",
+            "key_press_animation",
             "keyboard_width", "keyboard_height",
             "keyboard_width_landscape", "keyboard_height_landscape",
             "keyboard_vertical_offset", "backspace_separate_row",
@@ -256,7 +258,7 @@ class KeyFarsiIme : InputMethodService() {
     private fun computeSettingsHash(): Int {
         val stringKeys = listOf("theme")
         val booleanKeys = listOf(
-            "dark", "standard_big_keyboard",
+            "dark", "standard_big_keyboard", "key_press_animation",
             "merge_key_kaf", "merge_key_kaf_delete",
             "merge_key_re", "merge_key_re_delete",
             "merge_ta_za", "merge_ta_za_delete",
@@ -271,6 +273,7 @@ class KeyFarsiIme : InputMethodService() {
             "keyboard_padding", "letter_side_margin",
             "fa_key_width", "fa_key_height", "fa_key_gap",
             "en_key_width", "en_key_height", "en_key_gap",
+            "num_key_width", "num_key_height", "num_key_gap",
             "keyboard_width", "keyboard_height",
             "keyboard_width_landscape", "keyboard_height_landscape",
             "keyboard_vertical_offset",
@@ -1045,8 +1048,12 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
+    // ✅ کیبورد عددی: ابعاد فقط از num_* (مستقل از fa_*)
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        val rawNumHeight = prefs.getInt("number_key_height", 0)
+        // ارتفاع: اولویت num_key_height → number_key_height → fa_key_height → پیش‌فرض
+        val rawNumHeight = prefs.getInt("num_key_height", 0).let {
+            if (it > 0) it else prefs.getInt("number_key_height", 0)
+        }
         val fallbackFaHeight = prefs.getInt("fa_key_height", 0)
         val baseNumHeightDp = when {
             rawNumHeight > 0 -> rawNumHeight
@@ -1058,11 +1065,15 @@ class KeyFarsiIme : InputMethodService() {
             else baseNumHeightDp.coerceIn(30, 60)
         )
 
-        val faGapRaw = prefs.getInt("fa_key_gap", 0)
-        val numGap = dp(if (faGapRaw > 0) faGapRaw else DEFAULT_KEY_GAP)
+        // عرض: اولویت num_key_width → نامشخص (کششی)
+        val numKeyWidthRaw = prefs.getInt("num_key_width", 0)
+        val numKeyWidthConfigured = if (numKeyWidthRaw > 0) dp(numKeyWidthRaw) else 0
 
-        val faKeyWidthRaw = prefs.getInt("fa_key_width", 0)
-        val numKeyWidthConfigured = if (faKeyWidthRaw > 0) dp(faKeyWidthRaw) else 0
+        // فاصله: اولویت num_key_gap → fa_key_gap → پیش‌فرض
+        val numGapRaw = prefs.getInt("num_key_gap", 0).let {
+            if (it > 0) it else prefs.getInt("fa_key_gap", 0)
+        }
+        val numGap = dp(if (numGapRaw > 0) numGapRaw else DEFAULT_KEY_GAP)
 
         val rows = listOf(
             listOf("۱", "۲", "۳"),
@@ -1089,7 +1100,7 @@ class KeyFarsiIme : InputMethodService() {
         val zeroDisplay = if (english) "0" else "۰"
         val zeroView = numberKeyView(zeroDisplay, keyBg, fg) { commit(if (english) "0" else "۰") }
         val zeroLp = if (numKeyWidthConfigured > 0) {
-            LinearLayout.LayoutParams(numKeyWidthConfigured * 2, numKeyHeight)
+            LinearLayout.LayoutParams(numKeyWidthConfigured * 2 + numGap * 2, numKeyHeight)
         } else {
             LinearLayout.LayoutParams(0, numKeyHeight, 2f)
         }
@@ -1335,7 +1346,8 @@ class KeyFarsiIme : InputMethodService() {
         return LayerDrawable(arrayOf(InsetDrawable(shadow, 0, 0, 0, dp(2)), main))
     }
 
-    private fun createKeyStateBackground(color: Int): StateListDrawable {
+    // ✅ پس‌زمینه‌ی state-based؛ اگر انیمیشن غیرفعال باشد فقط normal برمی‌گردد
+    private fun createKeyStateBackground(color: Int): android.graphics.drawable.Drawable {
         val dark = prefs.getBoolean("dark", false)
         val topColor = if (dark) lighten(color, 18) else lighten(color, 8)
         val bottomColor = if (dark) darken(color, 18) else darken(color, 12)
@@ -1347,16 +1359,21 @@ class KeyFarsiIme : InputMethodService() {
         val normalShadow = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(darken(bottomColor, 30), darken(bottomColor, 40))).apply { cornerRadius = dp(9).toFloat() }
         val normal = LayerDrawable(arrayOf(InsetDrawable(normalShadow, 0, 0, 0, dp(2)), normalMain))
 
+        val animationEnabled = prefs.getBoolean("key_press_animation", true)
+        if (!animationEnabled) {
+            // ✅ فقط حالت عادی، بدون state_pressed
+            return normal
+        }
+
         val pressedTop = darken(topColor, 20)
         val pressedBottom = darken(bottomColor, 20)
         val pressedMain = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(pressedTop, pressedBottom)).apply {
             cornerRadius = dp(9).toFloat()
             setStroke(dp(1), if (dark) 0xFF44404E.toInt() else 0xFFCFCBD8.toInt())
         }
-        val pressed = pressedMain
 
         return StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(android.R.attr.state_pressed), pressedMain)
             addState(intArrayOf(), normal)
         }
     }
@@ -1381,11 +1398,9 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildKeyboard())
     }
 
-    // ✅ ارقام (فارسی/عربی/انگلیسی)
     private fun isDigitChar(c: Char): Boolean =
         c in '0'..'9' || c in '۰'..'۹' || c in '٠'..'٩'
 
-    // ✅ حرف واقعی: ارقام هرگز حرف نیستند
     private fun isLetterChar(c: Char): Boolean {
         if (isDigitChar(c)) return false
         return c.isLetter() || c in '\u0600'..'\u06FF' || c in '\u200c'..'\u200f'
@@ -1399,7 +1414,6 @@ class KeyFarsiIme : InputMethodService() {
 
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
-            // ✅ فاصله خودکار فقط وقتی حرف تایپ می‌شود و کاراکتر قبل عدد بود
             if (value.length == 1 && isLetterChar(value[0])) {
                 try {
                     val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
