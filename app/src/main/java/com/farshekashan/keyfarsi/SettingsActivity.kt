@@ -227,7 +227,6 @@ class SettingsActivity : Activity() {
             setPadding(0, dp(4), 0, dp(8))
         })
 
-        // ✅ آستانه تایپ آرام: پیش‌فرض جدید ۱۵۰۰ms و محدوده گسترده‌تر
         addNumberField(
             outer,
             "آستانه تایپ آرام (میلی‌ثانیه) - بیشتر = تصحیح کمتر\nپیشنهاد: ۱۵۰۰ms برای تایپ عادی",
@@ -432,6 +431,22 @@ class SettingsActivity : Activity() {
         }
         outer.addView(dark)
 
+        // ✅ گزینه فعال/غیرفعال کردن انیمیشن فشردن کلیدها
+        val pressAnim = CheckBox(this).apply {
+            text = "انیمیشن فشردن کلیدها (اگر کندی حس می‌کنی خاموش کن)"
+            isChecked = prefs.getBoolean("key_press_animation", true)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean("key_press_animation", checked).apply()
+            }
+        }
+        outer.addView(pressAnim)
+        outer.addView(TextView(this).apply {
+            text = "با خاموش کردن این گزینه، رنگ کلید هنگام فشردن تغییر نمی‌کند و پردازش کمتری مصرف می‌شود."
+            textSize = 12f
+            setTextColor(0xFF8A8399.toInt())
+            setPadding(0, dp(4), 0, dp(8))
+        })
+
         val themeLabel = TextView(this).apply {
             text = "انتخاب تم کیبورد:"
             textSize = 14f
@@ -458,7 +473,7 @@ class SettingsActivity : Activity() {
         }
         outer.addView(spinner, match())
 
-        outer.addView(sectionTitle("اندازه و چیدمان کیبورد"))
+        outer.addView(sectionTitle("اندازه و چیدمان کیبورد حروف"))
         addNumberField(outer, "عرض دکمه‌ها (dp) - ۰ برای خودکار", "fa_key_width", 0, 0, 200)
         addNumberField(outer, "ارتفاع دکمه‌ها (dp)", "fa_key_height", 40, 28, 120)
         addNumberField(outer, "فاصله بین دکمه‌ها (dp)", "fa_key_gap", 4, 0, 20)
@@ -474,6 +489,18 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "عرض کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_width_landscape", 0, 0, 1200)
         addNumberField(outer, "ارتفاع کیبورد در حالت افقی (dp) - ۰ برای خودکار", "keyboard_height_landscape", 0, 0, 800)
 
+        // ✅ بخش جدید: اندازه صفحه کلید عددی (مستقل از حروف)
+        outer.addView(sectionTitle("اندازه صفحه کلید عددی (مستقل از حروف)"))
+        outer.addView(TextView(this).apply {
+            text = "این مقادیر فقط روی صفحه اعداد اعمال می‌شوند و با تغییر اندازه دکمه‌های حروف، اعداد تغییر نمی‌کنند.\n۰ = خودکار (کششی)"
+            textSize = 13f
+            setTextColor(0xFF514B5D.toInt())
+            setPadding(0, dp(4), 0, dp(10))
+        })
+        addNumberField(outer, "عرض دکمه‌های عدد (dp) - ۰ برای کششی", "num_key_width", 0, 0, 200)
+        addNumberField(outer, "ارتفاع دکمه‌های عدد (dp)", "num_key_height", 46, 30, 80)
+        addNumberField(outer, "فاصله بین دکمه‌های عدد (dp) - ۰ برای پیش‌فرض", "num_key_gap", 4, 0, 20)
+
         outer.addView(sectionTitle("اندازه دکمه‌های فاصله و اینتر"))
         outer.addView(TextView(this).apply {
             text = "مقدار بزرگ‌تر = دکمه پهن‌تر. در هر دو حالت عادی و استاندارد اعمال می‌شود."
@@ -484,7 +511,6 @@ class SettingsActivity : Activity() {
         addNumberField(outer, "وزن دکمه فاصله (۱ تا ۸)", "space_weight", 3, 1, 8)
         addNumberField(outer, "وزن دکمه اینتر (۱۰ تا ۲۵ - تقسیم بر ۱۰)", "enter_weight", 15, 10, 25)
 
-        // ✅ دکمه‌های حروف: سرعت نگه‌داشتن و صفحه اعداد
         outer.addView(sectionTitle("دکمه‌های حروف و اعداد"))
         outer.addView(TextView(this).apply {
             text = "سرعت پاسخ دکمه‌ها را تنظیم کن. مقدار کمتر = پاسخ سریع‌تر هنگام نگه‌داشتن دکمه."
@@ -499,14 +525,6 @@ class SettingsActivity : Activity() {
             400,
             150,
             1200
-        )
-        addNumberField(
-            outer,
-            "ارتفاع دکمه‌های صفحه اعداد (dp) - عمودی\nپیش‌فرض: ۴۶",
-            "number_key_height",
-            46,
-            30,
-            80
         )
 
         outer.addView(sectionTitle("بک‌اسپیس"))
@@ -589,7 +607,6 @@ class SettingsActivity : Activity() {
                     .putInt("keyboard_vertical_offset", 0)
                     .putInt("space_weight", 3)
                     .putInt("enter_weight", 15)
-                    // ✅ پیش‌فرض‌های جدید
                     .putInt("slow_typing_threshold", 1500)
                     .putBoolean("auto_correct", true)
                     .putBoolean("dark", false)
@@ -597,6 +614,11 @@ class SettingsActivity : Activity() {
                     .putBoolean("standard_big_keyboard", false)
                     .putInt("long_press_delay", 400)
                     .putInt("number_key_height", 46)
+                    // ✅ پیش‌فرض‌های جدید
+                    .putInt("num_key_width", 0)
+                    .putInt("num_key_height", 46)
+                    .putInt("num_key_gap", 4)
+                    .putBoolean("key_press_animation", true)
                     .apply()
                 Toast.makeText(this@SettingsActivity, "تنظیمات بازنشانی شد", Toast.LENGTH_SHORT).show()
                 recreate()
