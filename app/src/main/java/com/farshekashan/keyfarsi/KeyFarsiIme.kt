@@ -922,6 +922,7 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
+    // ✅ کلید حرفی: long-press با تأخیر قابل تنظیم از prefs["long_press_delay"]
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -931,6 +932,7 @@ class KeyFarsiIme : InputMethodService() {
             else -> alternateChars[text.lowercase()] ?: alternateChars[text]
         }
         val hasLongPress = !alternates.isNullOrEmpty()
+        val longPressDelay = prefs.getInt("long_press_delay", 400).coerceIn(150, 1200).toLong()
 
         val base = TextView(this).apply {
             if (mergeSecondary != null && text.isNotEmpty()) {
@@ -963,13 +965,40 @@ class KeyFarsiIme : InputMethodService() {
 
             isClickable = true
             isFocusable = true
+
+            // ✅ کلیک استاندارد: همیشه برای تایپ عادی اجرا می‌شود
             setOnClickListener { click() }
 
             if (hasLongPress) {
-                setOnLongClickListener {
-                    if (alternates!!.size == 1) commit(alternates[0])
-                    else showAlternativesPopup(this, alternates)
-                    true
+                var longPressTriggered = false
+                var longPressRunnable: Runnable? = null
+
+                // ✅ long-press سفارشی با تأخیر دلخواه از prefs
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            longPressTriggered = false
+                            longPressRunnable?.let { handler.removeCallbacks(it) }
+                            longPressRunnable = Runnable {
+                                longPressTriggered = true
+                                if (alternates!!.size == 1) commit(alternates[0])
+                                else showAlternativesPopup(view, alternates)
+                            }
+                            handler.postDelayed(longPressRunnable!!, longPressDelay)
+                            false // اجازه بده setOnClickListener هم کار کنه
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            longPressRunnable?.let { handler.removeCallbacks(it) }
+                            longPressRunnable = null
+                            if (longPressTriggered) {
+                                // long-press اجرا شد → جلوگیری از کلیک
+                                true
+                            } else {
+                                false // setOnClickListener خودش UP را پردازش می‌کند
+                            }
+                        }
+                        else -> false
+                    }
                 }
             }
         }
@@ -1048,9 +1077,7 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
-    // ✅ کیبورد عددی: ابعاد فقط از num_* (مستقل از fa_*)
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
-        // ارتفاع: اولویت num_key_height → number_key_height → fa_key_height → پیش‌فرض
         val rawNumHeight = prefs.getInt("num_key_height", 0).let {
             if (it > 0) it else prefs.getInt("number_key_height", 0)
         }
@@ -1065,11 +1092,9 @@ class KeyFarsiIme : InputMethodService() {
             else baseNumHeightDp.coerceIn(30, 60)
         )
 
-        // عرض: اولویت num_key_width → نامشخص (کششی)
         val numKeyWidthRaw = prefs.getInt("num_key_width", 0)
         val numKeyWidthConfigured = if (numKeyWidthRaw > 0) dp(numKeyWidthRaw) else 0
 
-        // فاصله: اولویت num_key_gap → fa_key_gap → پیش‌فرض
         val numGapRaw = prefs.getInt("num_key_gap", 0).let {
             if (it > 0) it else prefs.getInt("fa_key_gap", 0)
         }
@@ -1346,7 +1371,6 @@ class KeyFarsiIme : InputMethodService() {
         return LayerDrawable(arrayOf(InsetDrawable(shadow, 0, 0, 0, dp(2)), main))
     }
 
-    // ✅ پس‌زمینه‌ی state-based؛ اگر انیمیشن غیرفعال باشد فقط normal برمی‌گردد
     private fun createKeyStateBackground(color: Int): android.graphics.drawable.Drawable {
         val dark = prefs.getBoolean("dark", false)
         val topColor = if (dark) lighten(color, 18) else lighten(color, 8)
@@ -1360,10 +1384,7 @@ class KeyFarsiIme : InputMethodService() {
         val normal = LayerDrawable(arrayOf(InsetDrawable(normalShadow, 0, 0, 0, dp(2)), normalMain))
 
         val animationEnabled = prefs.getBoolean("key_press_animation", true)
-        if (!animationEnabled) {
-            // ✅ فقط حالت عادی، بدون state_pressed
-            return normal
-        }
+        if (!animationEnabled) return normal
 
         val pressedTop = darken(topColor, 20)
         val pressedBottom = darken(bottomColor, 20)
