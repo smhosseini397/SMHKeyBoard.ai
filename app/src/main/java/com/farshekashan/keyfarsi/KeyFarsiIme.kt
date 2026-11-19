@@ -919,7 +919,6 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
-    // ✅ کلید حرفی: setOnClickListener استاندارد + long-press استاندارد + StateListDrawable برای افکت
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -928,7 +927,6 @@ class KeyFarsiIme : InputMethodService() {
             mergeSecondary != null -> listOf(mergeSecondary.toString())
             else -> alternateChars[text.lowercase()] ?: alternateChars[text]
         }
-        val longPressDelay = prefs.getInt("long_press_delay", 400).coerceIn(150, 1200).toLong()
         val hasLongPress = !alternates.isNullOrEmpty()
 
         val base = TextView(this).apply {
@@ -970,8 +968,6 @@ class KeyFarsiIme : InputMethodService() {
                     else showAlternativesPopup(this, alternates)
                     true
                 }
-                // اگر کاربر می‌خواهد long-press با تأخیر دلخواه: از postDelayed روی ACTION_DOWN استفاده می‌کنیم
-                // اما چون setOnClickListener استاندارد را ترجیح می‌دهیم، فقط long click پیش‌فرض سیستم را می‌پذیریم.
             }
         }
         return base
@@ -1049,7 +1045,6 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
-    // ✅ کیبورد عددی: ارتفاع دکمه‌ها با numKeyHeight (بدون تداخل با keyHeight پیش‌فرض)
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
         val rawNumHeight = prefs.getInt("number_key_height", 0)
         val fallbackFaHeight = prefs.getInt("fa_key_height", 0)
@@ -1128,7 +1123,6 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(controls)
     }
 
-    // ✅ ویو دکمه‌ی عددی: بدون layoutParams داخلی، فقط ظاهر + click
     private fun numberKeyView(text: String, bg: Int, fg: Int, click: () -> Unit): TextView {
         return TextView(this).apply {
             this.text = text
@@ -1341,7 +1335,6 @@ class KeyFarsiIme : InputMethodService() {
         return LayerDrawable(arrayOf(InsetDrawable(shadow, 0, 0, 0, dp(2)), main))
     }
 
-    // ✅ پس‌زمینه‌ی state-based (pressed / normal) بدون نیاز به touch listener دستی
     private fun createKeyStateBackground(color: Int): StateListDrawable {
         val dark = prefs.getBoolean("dark", false)
         val topColor = if (dark) lighten(color, 18) else lighten(color, 8)
@@ -1388,31 +1381,33 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildKeyboard())
     }
 
-    // ✅ commit با فاصله‌ی خودکار بعد از عدد
+    // ✅ اگر کاراکتر قبل عدد بود و الان حرف تایپ شد، یک فاصله خودکار قبل از حرف
+    private fun isDigitChar(c: Char): Boolean =
+        c in '0'..'9' || c in '۰'..'۹' || c in '٠'..'٩'
+
+    private fun isLetterChar(c: Char): Boolean =
+        c.isLetter() || c in '\u0600'..'\u06FF' || c in '\u200c'..'\u200f'
+
     private fun commit(value: String) {
         val ic = currentInputConnection ?: return
         val now = System.currentTimeMillis()
         val timeSinceLastKey = if (lastKeyTime == 0L) Long.MAX_VALUE else now - lastKeyTime
         lastKeyTime = now
 
-        // اگر مقدار عددی است و آستانه‌ی شروع کلمه‌ی جدید را داریم، فاصله بزن
-        val isDigitValue = value.length == 1 && (value[0] in '0'..'9' || value[0] in '۰'..'۹' || value[0] in '٠'..'٩')
-
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
-            val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
-
-            if (isDigitValue && !numberMode) {
-                // اگر عدد تایپ می‌شود (حتی در حالت حروف) و کاراکتر قبل حرف است → یک فاصله قبل از عدد
+            // ✅ فاصله خودکار: اگر الان حرف تایپ می‌شود و کاراکتر قبل عدد بود
+            if (value.length == 1 && isLetterChar(value[0])) {
                 try {
                     val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
                     val lastChar = before.lastOrNull()
-                    if (lastChar != null && (lastChar.isLetter() || lastChar in '\u0600'..'\u06FF') && lastChar != '\u200c') {
+                    if (lastChar != null && isDigitChar(lastChar)) {
                         ic.commitText(" ", 1)
                     }
                 } catch (_: Exception) {}
             }
 
+            val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
             ic.commitText(finalValue, 1)
 
             pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
