@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.StateListDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.Handler
@@ -27,7 +28,6 @@ import android.view.inputmethod.EditorInfo
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -540,32 +540,12 @@ class KeyFarsiIme : InputMethodService() {
                 background = createKeyBackground(buttonBg)
                 isClickable = true
                 isFocusable = true
-                var longPressTriggered = false
-                val longPressRunnable = Runnable {
-                    longPressTriggered = true
-                    if (word.isNotBlank()) showDeleteLearnedWordDialog(word)
+                setOnClickListener {
+                    if (word.isNotBlank()) replaceCurrentWord(word)
                 }
-                setOnTouchListener { view, event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            longPressTriggered = false
-                            handler.postDelayed(longPressRunnable, 500L)
-                            true
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            handler.removeCallbacks(longPressRunnable)
-                            if (!longPressTriggered && word.isNotBlank()) {
-                                view.performClick()
-                                replaceCurrentWord(word)
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_CANCEL -> {
-                            handler.removeCallbacks(longPressRunnable)
-                            true
-                        }
-                        else -> false
-                    }
+                setOnLongClickListener {
+                    if (word.isNotBlank()) showDeleteLearnedWordDialog(word)
+                    true
                 }
             }
             row.addView(button, LinearLayout.LayoutParams(0, dp(34), 1f).apply { setMargins(dp(2), dp(1), dp(2), dp(1)) })
@@ -897,7 +877,6 @@ class KeyFarsiIme : InputMethodService() {
                     line.addView(letterKeySized(v, keyBg, fg, keyWidthPx, keyHeight, gapPx) { commit(v) })
                 }
                 if (!backspaceSeparate) {
-                    // ✅ spacer کشسان تا backspace به لبه راست چسبیده شود
                     val spacer = View(this).apply {
                         layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
                     }
@@ -940,6 +919,7 @@ class KeyFarsiIme : InputMethodService() {
         }
     }
 
+    // ✅ کلید حرفی: setOnClickListener استاندارد + long-press استاندارد + StateListDrawable برای افکت
     private fun letterKeySized(text: String, bg: Int, fg: Int, widthPx: Int, heightPx: Int, gapPx: Int, click: () -> Unit): View {
         val primaryChar = text.firstOrNull() ?: ' '
         val mergeSecondary = mergeLabelFor(primaryChar)
@@ -974,7 +954,7 @@ class KeyFarsiIme : InputMethodService() {
             typeface = Typeface.DEFAULT
             maxLines = 2
             setPadding(dp(2), dp(1), dp(2), dp(3))
-            background = createKeyBackground(bg)
+            background = createKeyStateBackground(bg)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
@@ -982,79 +962,16 @@ class KeyFarsiIme : InputMethodService() {
 
             isClickable = true
             isFocusable = true
+            setOnClickListener { click() }
 
-            var longPressTriggered = false
-            var longPressRunnable: Runnable? = null
-            var downX = 0f
-            var downY = 0f
-            var executed = false
-            val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        longPressTriggered = false
-                        executed = false
-                        downX = event.x
-                        downY = event.y
-                        view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat()
-
-                        if (hasLongPress) {
-                            longPressRunnable = Runnable {
-                                longPressTriggered = true
-                                executed = true
-                                view.animate().translationY(0f).setDuration(60).start()
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(3).toFloat()
-                                if (alternates!!.size == 1) commit(alternates[0])
-                                else showAlternativesPopup(view, alternates)
-                            }
-                            handler.postDelayed(longPressRunnable!!, longPressDelay)
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        if (!longPressTriggered) {
-                            val dx = abs(event.x - downX)
-                            val dy = abs(event.y - downY)
-                            if (dx > touchSlop || dy > touchSlop) {
-                                longPressRunnable?.let { handler.removeCallbacks(it) }
-                                longPressRunnable = null
-                            }
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        longPressRunnable?.let { handler.removeCallbacks(it) }
-                        longPressRunnable = null
-                        view.animate().translationY(0f).setDuration(60).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
-                        }
-                        if (!longPressTriggered && !executed) {
-                            executed = true
-                            view.performClick()
-                            click()
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_CANCEL -> {
-                        longPressRunnable?.let { handler.removeCallbacks(it) }
-                        longPressRunnable = null
-                        view.animate().translationY(0f).setDuration(60).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
-                        }
-                        // ✅ اگر حرکت قابل توجه نبود و long-press رخ نداده، commit کن
-                        if (!longPressTriggered && !executed) {
-                            executed = true
-                            view.performClick()
-                            click()
-                        }
-                        true
-                    }
-                    else -> false
+            if (hasLongPress) {
+                setOnLongClickListener {
+                    if (alternates!!.size == 1) commit(alternates[0])
+                    else showAlternativesPopup(this, alternates)
+                    true
                 }
+                // اگر کاربر می‌خواهد long-press با تأخیر دلخواه: از postDelayed روی ACTION_DOWN استفاده می‌کنیم
+                // اما چون setOnClickListener استاندارد را ترجیح می‌دهیم، فقط long click پیش‌فرض سیستم را می‌پذیریم.
             }
         }
         return base
@@ -1075,7 +992,7 @@ class KeyFarsiIme : InputMethodService() {
             gravity = Gravity.CENTER
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
-            background = createKeyBackground(bg)
+            background = createKeyStateBackground(bg)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
@@ -1086,17 +1003,11 @@ class KeyFarsiIme : InputMethodService() {
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat()
                         deleteOneChar()
                         startRepeat()
                         true
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        view.animate().translationY(0f).setDuration(60).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
-                        }
                         stopRepeat()
                         true
                     }
@@ -1138,6 +1049,7 @@ class KeyFarsiIme : InputMethodService() {
         root.addView(bottom)
     }
 
+    // ✅ کیبورد عددی: ارتفاع دکمه‌ها با numKeyHeight (بدون تداخل با keyHeight پیش‌فرض)
     private fun buildNumberPad(root: LinearLayout, keyBg: Int, fg: Int) {
         val rawNumHeight = prefs.getInt("number_key_height", 0)
         val fallbackFaHeight = prefs.getInt("fa_key_height", 0)
@@ -1166,16 +1078,13 @@ class KeyFarsiIme : InputMethodService() {
             val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
             row.forEach { value ->
                 val display = if (english) toEnglishDigits(value) else value
-                val cellView = keyButton(display, keyBg, fg, 20f) { commit(if (english) toEnglishDigits(value) else value) }
+                val cellView = numberKeyView(display, keyBg, fg) { commit(if (english) toEnglishDigits(value) else value) }
                 val lp = if (numKeyWidthConfigured > 0) {
-                    LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight).apply {
-                        setMargins(numGap, dp(2), numGap, dp(2))
-                    }
+                    LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight)
                 } else {
-                    LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
-                        setMargins(numGap, dp(2), numGap, dp(2))
-                    }
+                    LinearLayout.LayoutParams(0, numKeyHeight, 1f)
                 }
+                lp.setMargins(numGap, dp(2), numGap, dp(2))
                 line.addView(cellView, lp)
             }
             root.addView(line)
@@ -1183,39 +1092,30 @@ class KeyFarsiIme : InputMethodService() {
 
         val lastRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         val zeroDisplay = if (english) "0" else "۰"
-        val zeroView = keyButton(zeroDisplay, keyBg, fg, 20f) { commit(if (english) "0" else "۰") }
+        val zeroView = numberKeyView(zeroDisplay, keyBg, fg) { commit(if (english) "0" else "۰") }
         val zeroLp = if (numKeyWidthConfigured > 0) {
-            LinearLayout.LayoutParams(numKeyWidthConfigured * 2, numKeyHeight).apply {
-                setMargins(numGap, dp(2), numGap, dp(2))
-            }
+            LinearLayout.LayoutParams(numKeyWidthConfigured * 2, numKeyHeight)
         } else {
-            LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply {
-                setMargins(numGap, dp(2), numGap, dp(2))
-            }
+            LinearLayout.LayoutParams(0, numKeyHeight, 2f)
         }
+        zeroLp.setMargins(numGap, dp(2), numGap, dp(2))
         lastRow.addView(zeroView, zeroLp)
 
-        val bs = backspaceKeySized(keyBg, fg, 0, numKeyHeight, 0)
+        val bs = numberBackspaceView(keyBg, fg)
         val bsLp = if (numKeyWidthConfigured > 0) {
-            LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight).apply {
-                setMargins(numGap, dp(2), numGap, dp(2))
-            }
+            LinearLayout.LayoutParams(numKeyWidthConfigured, numKeyHeight)
         } else {
-            LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply {
-                setMargins(numGap, dp(2), numGap, dp(2))
-            }
+            LinearLayout.LayoutParams(0, numKeyHeight, 1f)
         }
-        bs.layoutParams = bsLp
-        lastRow.addView(bs)
+        bsLp.setMargins(numGap, dp(2), numGap, dp(2))
+        lastRow.addView(bs, bsLp)
         root.addView(lastRow)
 
         val symbolsRow = listOf("؟","%","@","×","+","_","=",".")
         val symLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         symbolsRow.forEach { s ->
-            symLine.addView(
-                keyButton(s, keyBg, fg, 16f) { commit(s) },
-                LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) }
-            )
+            val cell = numberKeyView(s, keyBg, fg) { commit(s) }
+            symLine.addView(cell, LinearLayout.LayoutParams(0, numKeyHeight, 1f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         }
         root.addView(symLine)
 
@@ -1223,9 +1123,53 @@ class KeyFarsiIme : InputMethodService() {
         controls.addView(actionButton(t("mode_letters"), keyBg, fg) { toggleMode { numberMode = false } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         controls.addView(actionButton(t("mode_symbols"), keyBg, fg) { toggleMode { symbolMode = true } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         controls.addView(actionButton(t("mode_emoji"), keyBg, fg) { toggleMode { emojiMode = true } }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
-        controls.addView(keyButton(" ", keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
+        controls.addView(numberKeyView(" ", keyBg, fg) { commit(" ") }, LinearLayout.LayoutParams(0, numKeyHeight, 2f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         controls.addView(actionButton(t("key_enter"), Color.rgb(103, 80, 164), Color.WHITE) { sendEnter() }, LinearLayout.LayoutParams(0, numKeyHeight, 1.5f).apply { setMargins(numGap, dp(2), numGap, dp(2)) })
         root.addView(controls)
+    }
+
+    // ✅ ویو دکمه‌ی عددی: بدون layoutParams داخلی، فقط ظاهر + click
+    private fun numberKeyView(text: String, bg: Int, fg: Int, click: () -> Unit): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 20f
+            setTextColor(fg)
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT
+            maxLines = 1
+            setPadding(dp(2), dp(2), dp(2), dp(5))
+            background = createKeyStateBackground(bg)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dp(3).toFloat()
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { click() }
+        }
+    }
+
+    private fun numberBackspaceView(bg: Int, fg: Int): TextView {
+        return TextView(this).apply {
+            text = t("key_backspace")
+            textSize = 14f
+            setTextColor(fg)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setPadding(dp(2), dp(2), dp(2), dp(5))
+            background = createKeyStateBackground(bg)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dp(3).toFloat()
+            }
+            isClickable = true
+            isFocusable = true
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { deleteOneChar(); startRepeat(); true }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { stopRepeat(); true }
+                    else -> false
+                }
+            }
+        }
     }
 
     private fun buildSymbolPage(root: LinearLayout, keyBg: Int, fg: Int) {
@@ -1350,60 +1294,13 @@ class KeyFarsiIme : InputMethodService() {
             typeface = Typeface.DEFAULT
             maxLines = 1
             setPadding(dp(2), dp(2), dp(2), dp(5))
-            background = createKeyBackground(bg)
+            background = createKeyStateBackground(bg)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 elevation = dp(3).toFloat()
             }
             isClickable = true
             isFocusable = true
-
-            var downX = 0f
-            var downY = 0f
-            var executed = false
-            val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        executed = false
-                        downX = event.x
-                        downY = event.y
-                        view.animate().translationY(dp(2).toFloat()).setDuration(40).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) view.elevation = dp(1).toFloat()
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        // فقط برای سازگاری، اجرا در UP/CANCEL انجام می‌شود
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        view.animate().translationY(0f).setDuration(60).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
-                        }
-                        if (!executed) {
-                            executed = true
-                            view.performClick()
-                            click()
-                        }
-                        true
-                    }
-                    MotionEvent.ACTION_CANCEL -> {
-                        view.animate().translationY(0f).setDuration(60).start()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            view.animate().setDuration(60).withEndAction { view.elevation = dp(3).toFloat() }.start()
-                        }
-                        // ✅ اگر حرکت قابل توجه نبود، commit کن
-                        if (!executed) {
-                            executed = true
-                            view.performClick()
-                            click()
-                        }
-                        true
-                    }
-                    else -> false
-                }
-            }
+            setOnClickListener { click() }
         }
     }
 
@@ -1444,6 +1341,33 @@ class KeyFarsiIme : InputMethodService() {
         return LayerDrawable(arrayOf(InsetDrawable(shadow, 0, 0, 0, dp(2)), main))
     }
 
+    // ✅ پس‌زمینه‌ی state-based (pressed / normal) بدون نیاز به touch listener دستی
+    private fun createKeyStateBackground(color: Int): StateListDrawable {
+        val dark = prefs.getBoolean("dark", false)
+        val topColor = if (dark) lighten(color, 18) else lighten(color, 8)
+        val bottomColor = if (dark) darken(color, 18) else darken(color, 12)
+
+        val normalMain = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(topColor, bottomColor)).apply {
+            cornerRadius = dp(9).toFloat()
+            setStroke(dp(1), if (dark) 0xFF55515F.toInt() else 0xFFE0DCE7.toInt())
+        }
+        val normalShadow = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(darken(bottomColor, 30), darken(bottomColor, 40))).apply { cornerRadius = dp(9).toFloat() }
+        val normal = LayerDrawable(arrayOf(InsetDrawable(normalShadow, 0, 0, 0, dp(2)), normalMain))
+
+        val pressedTop = darken(topColor, 20)
+        val pressedBottom = darken(bottomColor, 20)
+        val pressedMain = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(pressedTop, pressedBottom)).apply {
+            cornerRadius = dp(9).toFloat()
+            setStroke(dp(1), if (dark) 0xFF44404E.toInt() else 0xFFCFCBD8.toInt())
+        }
+        val pressed = pressedMain
+
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(), normal)
+        }
+    }
+
     private fun lighten(color: Int, amount: Int): Int {
         val r = min(255, Color.red(color) + amount); val g = min(255, Color.green(color) + amount); val b = min(255, Color.blue(color) + amount)
         return Color.rgb(r, g, b)
@@ -1464,15 +1388,31 @@ class KeyFarsiIme : InputMethodService() {
         setInputView(buildKeyboard())
     }
 
+    // ✅ commit با فاصله‌ی خودکار بعد از عدد
     private fun commit(value: String) {
         val ic = currentInputConnection ?: return
         val now = System.currentTimeMillis()
         val timeSinceLastKey = if (lastKeyTime == 0L) Long.MAX_VALUE else now - lastKeyTime
         lastKeyTime = now
 
+        // اگر مقدار عددی است و آستانه‌ی شروع کلمه‌ی جدید را داریم، فاصله بزن
+        val isDigitValue = value.length == 1 && (value[0] in '0'..'9' || value[0] in '۰'..'۹' || value[0] in '٠'..'٩')
+
         val isWordBoundary = value == " " || value == "\n" || value in listOf(".", ",", "!", "؟", "؛")
         if (!isWordBoundary) {
             val finalValue = if (isNumericInput()) toEnglishDigits(value) else value
+
+            if (isDigitValue && !numberMode) {
+                // اگر عدد تایپ می‌شود (حتی در حالت حروف) و کاراکتر قبل حرف است → یک فاصله قبل از عدد
+                try {
+                    val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
+                    val lastChar = before.lastOrNull()
+                    if (lastChar != null && (lastChar.isLetter() || lastChar in '\u0600'..'\u06FF') && lastChar != '\u200c') {
+                        ic.commitText(" ", 1)
+                    }
+                } catch (_: Exception) {}
+            }
+
             ic.commitText(finalValue, 1)
 
             pendingSuggestUpdate?.let { handler.removeCallbacks(it) }
